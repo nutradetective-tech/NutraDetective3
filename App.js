@@ -219,10 +219,30 @@ export default function App() {
   }, 100);
 };
 
-  const handleHistoryItemPress = (item) => {
-    setActiveTab('home');
-    handleBarcodeScan({ data: item.barcode });
-  };
+  const handleHistoryItemPress = async (item) => {
+  setActiveTab('home');
+  setIsLoading(true);
+  
+  // Process after delay to show loading screen
+  setTimeout(async () => {
+    try {
+      const product = await ProductService.fetchProductByBarcode(item.barcode);
+      
+      if (product) {
+        product.barcode = item.barcode;
+        setCurrentProduct(product);
+        setShowResult(true);
+        // NOT calling saveToHistory - it's already in history!
+      } else {
+        Alert.alert('Error', 'Could not load product details');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch product data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, 100);
+};
 
   const clearHistory = () => {
     Alert.alert(
