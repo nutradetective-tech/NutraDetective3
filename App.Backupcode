@@ -13,9 +13,7 @@ import {
   StatusBar,
   Dimensions,
   Animated,
-  Image,
   Platform,
-  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import SimpleScanner from './components/SimpleScanner';
@@ -24,7 +22,6 @@ import EnhancedManualScanner from './components/EnhancedManualScanner';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CameraScanner from './components/CameraScanner';
 import ScannerSelector from './components/ScannerSelector';
-import UserSettingsService from './services/UserSettingsService';
 
 const { width, height } = Dimensions.get('window');
 
@@ -36,17 +33,6 @@ const getResponsiveSize = (mobile, tablet, desktop) => {
   if (isDesktop && desktop !== undefined) return desktop;
   if (isTablet && tablet !== undefined) return tablet;
   return mobile;
-};
-
-// Default settings
-const DEFAULT_SETTINGS = {
-  userName: 'User',
-  profileInitials: 'U',
-  activeFilters: ['gluten-free', 'no-dyes', 'tree-nuts'],
-  scanGoal: 5,
-  dashboardStats: ['totalScans', 'healthyPercent', 'streak'],
-  theme: 'light',
-  notifications: true,
 };
 
 export default function App() {
@@ -61,22 +47,12 @@ export default function App() {
   const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [showScanSelector, setShowScanSelector] = useState(false);
   
-  // User settings states
-  const [userSettings, setUserSettings] = useState(DEFAULT_SETTINGS);
-  const [showNameEditModal, setShowNameEditModal] = useState(false);
-  const [showFiltersModal, setShowFiltersModal] = useState(false);
-  const [showGoalModal, setShowGoalModal] = useState(false);
-  const [showStatsModal, setShowStatsModal] = useState(false);
-  const [tempName, setTempName] = useState('');
-  const [tempGoal, setTempGoal] = useState(5);
-  const [tempStats, setTempStats] = useState(['totalScans', 'healthyPercent', 'streak']);
-  
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const splashFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Load history and settings when app starts
+  // Load history when app starts
   useEffect(() => {
     // Fade in splash screen
     Animated.timing(splashFadeAnim, {
@@ -96,20 +72,10 @@ export default function App() {
       });
     }, 2000);
     
-    loadUserSettings();
     loadHistory();
     startPulseAnimation();
     fadeIn();
   }, []);
-
-  // Load user settings
-  const loadUserSettings = async () => {
-    const settings = await UserSettingsService.getSettings();
-    setUserSettings(settings);
-    setTempName(settings.userName);
-    setTempGoal(settings.scanGoal);
-    setTempStats(settings.dashboardStats);
-  };
 
   // Pulse animation for scan button
   const startPulseAnimation = () => {
@@ -212,33 +178,6 @@ export default function App() {
     return date.toLocaleDateString();
   };
 
-  // Get today's scan count
-  const getTodayScans = () => {
-    const today = new Date().toDateString();
-    return scanHistory.filter(item => {
-      const scanDate = new Date(item.date).toDateString();
-      return scanDate === today;
-    }).length;
-  };
-
-  // Get average grade
-  const getAverageGrade = () => {
-    if (scanHistory.length === 0) return 'N/A';
-    const avgScore = scanHistory.reduce((acc, item) => acc + item.score, 0) / scanHistory.length;
-    if (avgScore >= 90) return 'A';
-    if (avgScore >= 80) return 'A-';
-    if (avgScore >= 75) return 'B+';
-    if (avgScore >= 70) return 'B';
-    if (avgScore >= 65) return 'B-';
-    if (avgScore >= 60) return 'C+';
-    if (avgScore >= 55) return 'C';
-    if (avgScore >= 50) return 'C-';
-    if (avgScore >= 45) return 'D+';
-    if (avgScore >= 40) return 'D';
-    if (avgScore >= 30) return 'D-';
-    return 'F';
-  };
-
   const handleBarcodeScan = (result) => {
   const barcode = result.data || result;
   
@@ -255,17 +194,6 @@ export default function App() {
       const product = await ProductService.fetchProductByBarcode(barcode);
       
       if (product) {
-        // Check for user's allergens
-        if (userSettings.activeFilters && userSettings.activeFilters.length > 0) {
-          const allergenWarnings = ProductService.checkUserAllergens(product, userSettings.activeFilters);
-          if (allergenWarnings.length > 0) {
-            product.healthScore.warnings = [
-              ...allergenWarnings,
-              ...(product.healthScore.warnings || [])
-            ];
-          }
-        }
-        
         product.barcode = barcode;
         setCurrentProduct(product);
         setShowResult(true);
@@ -358,203 +286,6 @@ export default function App() {
     );
   };
 
-  // Name Edit Modal Component
-  const NameEditModal = () => (
-    <Modal 
-      visible={showNameEditModal} 
-      transparent 
-      animationType="slide"
-      onRequestClose={() => setShowNameEditModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Edit Display Name</Text>
-          <TextInput
-            style={styles.modalInput}
-            value={tempName}
-            onChangeText={setTempName}
-            placeholder="Enter your name"
-            maxLength={20}
-            autoFocus
-          />
-          <View style={styles.modalButtons}>
-            <TouchableOpacity 
-              style={styles.modalCancelButton}
-              onPress={() => {
-                setTempName(userSettings.userName);
-                setShowNameEditModal(false);
-              }}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.modalSaveButton}
-              onPress={async () => {
-                await UserSettingsService.updateUserName(tempName);
-                const newSettings = await UserSettingsService.getSettings();
-                setUserSettings(newSettings);
-                setShowNameEditModal(false);
-              }}
-            >
-              <LinearGradient
-                colors={['#667EEA', '#764BA2']}
-                style={styles.modalGradientButton}
-              >
-                <Text style={styles.modalSaveText}>Save</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Goal Edit Modal
-  const GoalEditModal = () => (
-    <Modal 
-      visible={showGoalModal} 
-      transparent 
-      animationType="slide"
-      onRequestClose={() => setShowGoalModal(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Daily Scan Goal</Text>
-          <View style={styles.goalSelector}>
-            <TouchableOpacity 
-              style={styles.goalButton}
-              onPress={() => setTempGoal(Math.max(1, tempGoal - 1))}
-            >
-              <Text style={styles.goalButtonText}>−</Text>
-            </TouchableOpacity>
-            <Text style={styles.goalValue}>{tempGoal}</Text>
-            <TouchableOpacity 
-              style={styles.goalButton}
-              onPress={() => setTempGoal(Math.min(50, tempGoal + 1))}
-            >
-              <Text style={styles.goalButtonText}>+</Text>
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.goalHint}>Set a daily target for scanning products</Text>
-          <View style={styles.modalButtons}>
-            <TouchableOpacity 
-              style={styles.modalCancelButton}
-              onPress={() => {
-                setTempGoal(userSettings.scanGoal);
-                setShowGoalModal(false);
-              }}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.modalSaveButton}
-              onPress={async () => {
-                await UserSettingsService.updateScanGoal(tempGoal);
-                const newSettings = await UserSettingsService.getSettings();
-                setUserSettings(newSettings);
-                setShowGoalModal(false);
-              }}
-            >
-              <LinearGradient
-                colors={['#667EEA', '#764BA2']}
-                style={styles.modalGradientButton}
-              >
-                <Text style={styles.modalSaveText}>Save</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
-
-  // Stats Selector Modal
-  const StatsSelectorModal = () => {
-    const availableStats = [
-      { id: 'totalScans', name: 'Total Scans', icon: '📊' },
-      { id: 'healthyPercent', name: 'Healthy %', icon: '✅' },
-      { id: 'streak', name: 'Day Streak', icon: '🔥' },
-      { id: 'dailyGoal', name: 'Daily Goal', icon: '🎯' },
-      { id: 'avgGrade', name: 'Avg Grade', icon: '📈' },
-    ];
-
-    const toggleStat = (statId) => {
-      if (tempStats.includes(statId)) {
-        if (tempStats.length > 1) {
-          setTempStats(tempStats.filter(id => id !== statId));
-        }
-      } else {
-        if (tempStats.length < 3) {
-          setTempStats([...tempStats, statId]);
-        }
-      }
-    };
-
-    return (
-      <Modal 
-        visible={showStatsModal} 
-        transparent 
-        animationType="slide"
-        onRequestClose={() => setShowStatsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Dashboard Stats</Text>
-            <Text style={styles.modalSubtitle}>Choose 3 stats to display</Text>
-            {availableStats.map(stat => (
-              <TouchableOpacity
-                key={stat.id}
-                style={[
-                  styles.statOption,
-                  tempStats.includes(stat.id) && styles.statOptionActive
-                ]}
-                onPress={() => toggleStat(stat.id)}
-              >
-                <Text style={styles.statOptionIcon}>{stat.icon}</Text>
-                <Text style={[
-                  styles.statOptionText,
-                  tempStats.includes(stat.id) && styles.statOptionTextActive
-                ]}>
-                  {stat.name}
-                </Text>
-                {tempStats.includes(stat.id) && (
-                  <Text style={styles.checkmark}>✓</Text>
-                )}
-              </TouchableOpacity>
-            ))}
-            <View style={styles.modalButtons}>
-              <TouchableOpacity 
-                style={styles.modalCancelButton}
-                onPress={() => {
-                  setTempStats(userSettings.dashboardStats);
-                  setShowStatsModal(false);
-                }}
-              >
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={styles.modalSaveButton}
-                onPress={async () => {
-                  await UserSettingsService.updateDashboardStats(tempStats);
-                  const newSettings = await UserSettingsService.getSettings();
-                  setUserSettings(newSettings);
-                  setShowStatsModal(false);
-                }}
-              >
-                <LinearGradient
-                  colors={['#667EEA', '#764BA2']}
-                  style={styles.modalGradientButton}
-                >
-                  <Text style={styles.modalSaveText}>Save</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-    );
-  };
-
   // SPLASH SCREEN
   if (showSplash) {
     return (
@@ -625,23 +356,6 @@ export default function App() {
                   {currentProduct.healthScore?.grade || '?'}
                 </Text>
               </LinearGradient>
-
-              
-  <View style={styles.productImageContainer}>
-  {currentProduct.image && !currentProduct.image.includes('PHN2Z') ? (
-    <Image 
-      source={{ uri: currentProduct.image }}
-      style={styles.productImage}
-      resizeMode="contain"
-    />
-  ) : (
-    <View style={styles.placeholderContainer}>
-      <Text style={styles.placeholderIcon}>📦</Text>
-      <Text style={styles.placeholderText}>No image available</Text>
-    </View>
-  )}
-</View>
-
 
               {/* Product Info */}
               <View style={styles.productInfo}>
@@ -833,15 +547,10 @@ export default function App() {
               colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
               style={styles.profileAvatarLarge}
             >
-              <Text style={styles.profileAvatarIcon}>{userSettings.profileInitials}</Text>
+              <Text style={styles.profileAvatarIcon}>🔍</Text>
             </LinearGradient>
-            <Text style={styles.profileNameWhite}>{userSettings.userName}</Text>
-            <TouchableOpacity 
-              onPress={() => setShowNameEditModal(true)}
-              style={styles.editNameButton}
-            >
-              <Text style={styles.editNameText}>✏️ Edit Name</Text>
-            </TouchableOpacity>
+            <Text style={styles.profileNameWhite}>User</Text>
+            <Text style={styles.profileEmailWhite}>Ready to scan healthier</Text>
           </LinearGradient>
 
           <ScrollView style={styles.profileContent}>
@@ -862,39 +571,6 @@ export default function App() {
                 <Text style={styles.profileStatValue}>{calculateStreak()}</Text>
                 <Text style={styles.profileStatLabel}>Day Streak</Text>
               </View>
-            </View>
-
-            {/* Settings Section */}
-            <View style={styles.settingsSection}>
-              <Text style={styles.sectionTitle}>Personalization</Text>
-              
-              <TouchableOpacity 
-                style={styles.settingItem}
-                onPress={() => setShowGoalModal(true)}
-              >
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingIcon}>🎯</Text>
-                  <Text style={styles.settingLabel}>Daily Scan Goal</Text>
-                </View>
-                <View style={styles.settingRight}>
-                  <Text style={styles.settingValue}>{userSettings.scanGoal} scans</Text>
-                  <Text style={styles.settingArrow}>→</Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity 
-                style={styles.settingItem}
-                onPress={() => setShowStatsModal(true)}
-              >
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingIcon}>📊</Text>
-                  <Text style={styles.settingLabel}>Dashboard Stats</Text>
-                </View>
-                <View style={styles.settingRight}>
-                  <Text style={styles.settingValue}>{userSettings.dashboardStats.length} active</Text>
-                  <Text style={styles.settingArrow}>→</Text>
-                </View>
-              </TouchableOpacity>
             </View>
 
             <TouchableOpacity style={styles.premiumButtonWrapper}>
@@ -940,11 +616,6 @@ export default function App() {
               <Text style={[styles.navLabel, styles.navLabelActive]}>Profile</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Modals */}
-          <NameEditModal />
-          <GoalEditModal />
-          <StatsSelectorModal />
         </ResponsiveContainer>
       </SafeAreaView>
     );
@@ -981,7 +652,7 @@ export default function App() {
                     styles.greeting,
                     { fontSize: getResponsiveSize(20, 24, 28) }
                   ]}>
-                    {getGreeting()}, {userSettings.userName}
+                    {getGreeting()}, User
                   </Text>
                   <Text style={styles.subGreeting}>Ready to scan healthier?</Text>
                 </View>
@@ -991,62 +662,42 @@ export default function App() {
                 colors={['#667EEA', '#764BA2']}
                 style={styles.profileCircle}
               >
-                <Text style={styles.profileCircleText}>{userSettings.profileInitials}</Text>
+                <Text style={styles.profileCircleText}>U</Text>
               </LinearGradient>
             </View>
 
-            {/* Dynamic Stats Grid */}
+            {/* Stats Grid with Glassmorphism */}
             <View style={[
               styles.statsGrid,
               isTablet && styles.statsGridTablet
             ]}>
-              {userSettings.dashboardStats.map((statType) => {
-                let statValue, statLabel, statColor;
-                
-                switch(statType) {
-                  case 'totalScans':
-                    statValue = scanHistory.length;
-                    statLabel = 'Products\nScanned';
-                    statColor = '#667EEA';
-                    break;
-                  case 'healthyPercent':
-                    statValue = `${Math.round((scanHistory.filter(item => item.score >= 70).length / (scanHistory.length || 1)) * 100)}%`;
-                    statLabel = 'Healthy\nChoices';
-                    statColor = '#10B981';
-                    break;
-                  case 'streak':
-                    statValue = calculateStreak();
-                    statLabel = 'Streak\nDays';
-                    statColor = '#F59E0B';
-                    break;
-                  case 'dailyGoal':
-                    const todayScans = getTodayScans();
-                    statValue = `${todayScans}/${userSettings.scanGoal}`;
-                    statLabel = 'Daily\nGoal';
-                    statColor = todayScans >= userSettings.scanGoal ? '#10B981' : '#8B5CF6';
-                    break;
-                  case 'avgGrade':
-                    statValue = getAverageGrade();
-                    statLabel = 'Average\nGrade';
-                    const avgScore = scanHistory.reduce((acc, item) => acc + item.score, 0) / (scanHistory.length || 1);
-                    statColor = getGradeColor(avgScore);
-                    break;
-                  default:
-                    return null;
-                }
-                
-                return (
-                  <View key={statType} style={[styles.statCard, styles.cardShadow]}>
-                    <Text style={[
-                      styles.statValue,
-                      { fontSize: getResponsiveSize(24, 28, 32), color: statColor }
-                    ]}>
-                      {statValue}
-                    </Text>
-                    <Text style={styles.statLabel}>{statLabel}</Text>
-                  </View>
-                );
-              })}
+              <View style={[styles.statCard, styles.cardShadow]}>
+                <Text style={[
+                  styles.statValue,
+                  { fontSize: getResponsiveSize(24, 28, 32) }
+                ]}>
+                  {scanHistory.length}
+                </Text>
+                <Text style={styles.statLabel}>Products{'\n'}Scanned</Text>
+              </View>
+              <View style={[styles.statCard, styles.cardShadow]}>
+                <Text style={[
+                  styles.statValue,
+                  { fontSize: getResponsiveSize(24, 28, 32) }
+                ]}>
+                  {Math.round((scanHistory.filter(item => item.score >= 70).length / (scanHistory.length || 1)) * 100)}%
+                </Text>
+                <Text style={styles.statLabel}>Healthy{'\n'}Choices</Text>
+              </View>
+              <View style={[styles.statCard, styles.cardShadow]}>
+                <Text style={[
+                  styles.statValue,
+                  { fontSize: getResponsiveSize(24, 28, 32) }
+                ]}>
+                  {calculateStreak()}
+                </Text>
+                <Text style={styles.statLabel}>Streak{'\n'}Days</Text>
+              </View>
             </View>
 
             {/* Main Scan Button with Gradient and Pulse */}
@@ -1797,8 +1448,6 @@ const styles = StyleSheet.create({
   },
   profileAvatarIcon: {
     fontSize: 50,
-    color: '#FFFFFF',
-    fontWeight: '700',
   },
   profileNameWhite: {
     fontSize: 24,
@@ -1809,18 +1458,6 @@ const styles = StyleSheet.create({
   profileEmailWhite: {
     fontSize: 16,
     color: 'rgba(255, 255, 255, 0.9)',
-  },
-  editNameButton: {
-    marginTop: 10,
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderRadius: 20,
-  },
-  editNameText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '600',
   },
   profileContent: {
     flex: 1,
@@ -1890,56 +1527,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
 
-  // Settings Section
-  settingsSection: {
-    backgroundColor: '#FFFFFF',
-    marginHorizontal: getResponsiveSize(15, 30, 40),
-    marginBottom: 15,
-    borderRadius: 16,
-    padding: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1A202C',
-    marginBottom: 15,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  settingLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  settingIcon: {
-    fontSize: 24,
-    marginRight: 15,
-  },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1A202C',
-  },
-  settingRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  settingValue: {
-    fontSize: 14,
-    color: '#64748B',
-    marginRight: 10,
-  },
-  settingArrow: {
-    fontSize: 18,
-    color: '#94A3B8',
-  },
-
   // Empty State
   emptyState: {
     flex: 1,
@@ -1976,178 +1563,4 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748B',
   },
-
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 24,
-    padding: 30,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#667EEA',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: '#1A202C',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-  modalInput: {
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 15,
-    fontSize: 16,
-    marginBottom: 20,
-    backgroundColor: '#F7F8FA',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalCancelButton: {
-    flex: 1,
-    padding: 15,
-    alignItems: 'center',
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-  },
-  modalCancelText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#64748B',
-  },
-  modalSaveButton: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  modalGradientButton: {
-    padding: 15,
-    alignItems: 'center',
-  },
-  modalSaveText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-
-  // Goal Modal Styles
-  goalSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  goalButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#F7F8FA',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginHorizontal: 20,
-  },
-  goalButtonText: {
-    fontSize: 24,
-    fontWeight: '600',
-    color: '#667EEA',
-  },
-  goalValue: {
-    fontSize: 48,
-    fontWeight: '700',
-    color: '#1A202C',
-    minWidth: 60,
-    textAlign: 'center',
-  },
-  goalHint: {
-    fontSize: 14,
-    color: '#64748B',
-    textAlign: 'center',
-    marginBottom: 20,
-  },
-
-  // Stats Selector Styles
-  statOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#E2E8F0',
-    marginBottom: 10,
-  },
-  statOptionActive: {
-    borderColor: '#667EEA',
-    backgroundColor: 'rgba(102, 126, 234, 0.05)',
-  },
-  statOptionIcon: {
-    fontSize: 24,
-    marginRight: 15,
-  },
-  statOptionText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#64748B',
-    flex: 1,
-  },
-  statOptionTextActive: {
-    color: '#667EEA',
-    fontWeight: '600',
-  },
-  checkmark: {
-    fontSize: 18,
-    color: '#667EEA',
-    fontWeight: '700',
-  },
-
-  productImageContainer: {
-  width: '90%',
-  height: 200,
-  alignSelf: 'center',
-  marginVertical: 15,
-  backgroundColor: '#f5f5f5',
-  borderRadius: 12,
-  overflow: 'hidden',
-},
-productImage: {
-  width: '100%',
-  height: '100%',
-},
-
-placeholderContainer: {
-  width: '100%',
-  height: '100%',
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#f5f5f5',
-},
-placeholderIcon: {
-  fontSize: 48,
-  marginBottom: 8,
-},
-placeholderText: {
-  fontSize: 14,
-  color: '#6B7280',
-},
-
 });
