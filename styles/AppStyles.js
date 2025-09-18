@@ -60,6 +60,159 @@ export const styles = StyleSheet.create({
     marginTop: 4,
   },
   
+  // NEW: All Allergens Section
+  allergensSection: {
+    backgroundColor: 'white',
+    marginHorizontal: 15,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 12,
+  },
+  allergenSubtext: {
+    color: '#6B7280',
+    fontSize: 14,
+    marginTop: 5,
+  },
+  allergensList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 10,
+  },
+  allergenChip: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  allergenChipText: {
+    color: '#991B1B',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  
+  // NEW: Nutrition Facts Styles
+  nutritionSection: {
+    backgroundColor: 'white',
+    marginHorizontal: 15,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 12,
+  },
+  nutritionSubtext: {
+    color: '#6B7280',
+    fontSize: 14,
+    marginTop: 5,
+  },
+  nutritionGrid: {
+    marginTop: 12,
+  },
+  nutritionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  nutritionLabel: {
+    color: '#4B5563',
+    fontSize: 14,
+  },
+  nutritionValue: {
+    color: '#1F2937',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  nutritionValueBad: {
+    color: '#DC2626',
+  },
+  servingSizeText: {
+    color: '#6B7280',
+    fontSize: 12,
+    marginTop: 10,
+    fontStyle: 'italic',
+  },
+  
+  // NEW: Additives Styles
+  additivesSection: {
+    backgroundColor: 'white',
+    marginHorizontal: 15,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 12,
+  },
+  additivesText: {
+    color: '#4B5563',
+    fontSize: 14,
+    marginTop: 8,
+  },
+  additiveItem: {
+    color: '#4B5563',
+    fontSize: 14,
+    marginTop: 5,
+  },
+  additivesCount: {
+    color: '#6B7280',
+    fontSize: 12,
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  
+  // NEW: Ingredients Styles
+  ingredientsSection: {
+    backgroundColor: 'white',
+    marginHorizontal: 15,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 12,
+  },
+  ingredientsText: {
+    color: '#4B5563',
+    fontSize: 14,
+    marginTop: 8,
+    lineHeight: 20,
+  },
+  
+  // NEW: Processing Level Styles
+  processingSection: {
+    backgroundColor: 'white',
+    marginHorizontal: 15,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 12,
+  },
+  novaGroupBadge: {
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 8,
+  },
+  novaGroupText: {
+    color: '#1F2937',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // NEW: Nutri-Score Styles
+  nutriScoreSection: {
+    backgroundColor: 'white',
+    marginHorizontal: 15,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 12,
+  },
+  nutriScoreBadge: {
+    marginTop: 8,
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  nutriScoreText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  
   // Concerns Section Styles
   concernsSection: {
     marginHorizontal: 15,
@@ -129,6 +282,7 @@ export const styles = StyleSheet.create({
     color: '#1A202C',
     flex: 1,
   },
+  
   // Container
   container: {
     flex: 1,
@@ -816,12 +970,6 @@ export const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1A202C',
-    marginBottom: 15,
-  },
   settingItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1030,40 +1178,34 @@ export const styles = StyleSheet.create({
     color: '#667EEA',
     fontWeight: '600',
   },
-  checkmark: {
-    fontSize: 18,
-    color: '#667EEA',
-    fontWeight: '700',
-  },
 
   productImageContainer: {
-  width: '90%',
-  height: 200,
-  alignSelf: 'center',
-  marginVertical: 15,
-  backgroundColor: '#f5f5f5',
-  borderRadius: 12,
-  overflow: 'hidden',
-},
-productImage: {
-  width: '100%',
-  height: '100%',
-},
-
-placeholderContainer: {
-  width: '100%',
-  height: '100%',
-  justifyContent: 'center',
-  alignItems: 'center',
-  backgroundColor: '#f5f5f5',
-},
-placeholderIcon: {
-  fontSize: 48,
-  marginBottom: 8,
-},
-placeholderText: {
-  fontSize: 14,
-  color: '#6B7280',
-},
+    width: '90%',
+    height: 200,
+    alignSelf: 'center',
+    marginVertical: 15,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  productImage: {
+    width: '100%',
+    height: '100%',
+  },
+  placeholderContainer: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#f5f5f5',
+  },
+  placeholderIcon: {
+    fontSize: 48,
+    marginBottom: 8,
+  },
+  placeholderText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
 
 });
