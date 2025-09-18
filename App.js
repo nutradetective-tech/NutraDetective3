@@ -27,6 +27,7 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import OverlayHints from './components/OverlayHints';
 import TutorialScanner from './components/TutorialScanner';
 import { LinearGradient } from 'expo-linear-gradient';
+import { MOCK_NUTELLA_DATA } from './constants/mockData';
 import SimpleScanner from './components/SimpleScanner';
 import ProductService from './services/ProductService';
 import EnhancedManualScanner from './components/EnhancedManualScanner';
@@ -229,14 +230,19 @@ const loadInitialData = async () => {
     }
   };
 
-  const handleBarcodeScan = async (result) => {
-    const barcode = result.data || result;
-    // Close all scanners
+  const handleBarcodeScan = async (result, isTutorial = false) => {
+  // Tutorial mode - use mock data directly
+  if (isTutorial) {
+    console.log('Tutorial mode - using mock data');
+    console.log('Mock data being set:', JSON.stringify(result, null, 2));
+    setCurrentProduct(result); // result is already the mock product data
+    setShowResult(true);
     setIsScanning(false);
-    setScanMethod(null);
-    setShowCameraScanner(false);
     setShowTutorialScanner(false);
-    console.log('Starting product fetch');
+    setShowHints(true);
+    // Don't make API call
+    return;
+  }
     
     // Process after modal closes
     setTimeout(async () => {
@@ -412,10 +418,10 @@ if (showTutorialScanner) {
   try {
     return (
       <TutorialScanner
-        onScanResult={(result) => {
-          console.log('TutorialScanner onScanResult called with:', result);
-          handleBarcodeScan(result);
-        }}
+        onScanResult={() => {
+  console.log('TutorialScanner onScanResult called with mock data');
+  handleBarcodeScan(MOCK_NUTELLA_DATA, true); // Pass mock data and tutorial flag
+}}
         onClose={() => {
           console.log('TutorialScanner onClose called');
           setShowTutorialScanner(false);

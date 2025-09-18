@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+
 const { width, height } = Dimensions.get('window');
 
 const OnboardingScreen = ({ onComplete }) => {

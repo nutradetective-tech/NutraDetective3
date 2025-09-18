@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "NutraDetective3",
+    "name": "NutraDetective",
     "slug": "NutraDetective3",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -9,24 +9,33 @@
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#667EEA"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.nutradetective.app",
+      "buildNumber": "1"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#667EEA"
       },
-      "package": "com.nutradetective.NutraDetective3"
+      "package": "com.nutradetective.app",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": [
+      "expo-camera"
+    ],
     "extra": {
       "eas": {
         "projectId": "a3b12fed-eec0-46ac-93e8-9bf699e367c5"

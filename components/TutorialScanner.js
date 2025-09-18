@@ -65,7 +65,7 @@ const TutorialScanner = ({ onScanResult, onClose }) => {
     }).start(() => {
       // Auto-submit after animation
       setTimeout(() => {
-        onScanResult(DEMO_BARCODE);
+        onScanResult(); // No parameter needed since mock data is passed from App.js
       }, 500);
     });
   };
