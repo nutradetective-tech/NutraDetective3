@@ -46,7 +46,36 @@ class ProductService {
       }
     } catch (error) {
       console.error('Open Food Facts error:', error);
-    }
+    }// Try Open Food Facts first (no API key needed)
+console.log('📡 Trying Open Food Facts...');
+
+// Add timeout
+const controller = new AbortController();
+const timeoutId = setTimeout(() => controller.abort(), 8000);
+
+try {
+  const response = await fetch(
+    `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
+    { signal: controller.signal }
+  );
+  clearTimeout(timeoutId);
+  const data = await response.json();
+  console.log('Open Food Facts response status:', data.status);
+  
+  if (data.status === 1 && data.product) {
+    product = data.product;
+    source = 'Open Food Facts';
+    console.log('✅ Found in Open Food Facts:', product.product_name);
+  } else {
+    console.log('❌ Not found in Open Food Facts');
+  }
+} catch (error) {
+  if (error.name === 'AbortError') {
+    console.log('⏱️ Open Food Facts timeout - taking too long');
+  } else {
+    console.error('Open Food Facts error:', error);
+  }
+}
 
     // If not found and USDA key exists, try USDA
     if (!product && this.API_KEYS.USDA && this.API_KEYS.USDA !== 'DEMO_KEY') {

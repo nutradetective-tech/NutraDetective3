@@ -271,17 +271,22 @@ const HomeScreen = ({
       ) : null}
 
       {/* Manual Scanner Modal */}
-      {isScanning && scanMethod === 'manual' && (
-        <Modal visible={true} animationType="slide">
-          <SimpleScanner
-            onScanResult={handleBarcodeScan}
-            onClose={() => {
-              setIsScanning(false);
-              setScanMethod(null);
-            }}
-          />
-        </Modal>
-      )}
+{isScanning && scanMethod === 'manual' && (
+  <Modal visible={true} animationType="slide">
+    <SimpleScanner
+      onScanResult={handleBarcodeScan}
+      onClose={() => {
+        setIsScanning(false);
+        setScanMethod(null);
+      }}
+      onSwitchToCamera={() => {
+        setIsScanning(false);
+        setScanMethod(null);
+        setShowScanSelector(true);
+      }}
+    />
+  </Modal>
+)}
 
       {/* Scanner Selection Modal */}
       <ScannerSelector

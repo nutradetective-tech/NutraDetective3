@@ -2843,9 +2843,7 @@ export const ADDITIVES_DATABASE = {
   }
 };
 
-// Helper function to get additive info by various formats
 export function getAdditiveInfo(additiveCode) {
-  // Handle different input formats
   let searchKey = additiveCode.toLowerCase().trim();
   
   // Try direct lookup first
@@ -2858,6 +2856,21 @@ export function getAdditiveInfo(additiveCode) {
     searchKey = 'en:' + searchKey;
     if (ADDITIVES_DATABASE[searchKey]) {
       return ADDITIVES_DATABASE[searchKey];
+    }
+  }
+  
+  // Extract base code without letter suffix (e322i -> e322)
+  const baseMatch = searchKey.match(/^(en:)?e(\d+)[a-z]*$/i);
+  if (baseMatch) {
+    const baseCode = (baseMatch[1] || 'en:') + 'e' + baseMatch[2];
+    if (ADDITIVES_DATABASE[baseCode]) {
+      // Found base additive, return it with variant notation
+      const baseInfo = ADDITIVES_DATABASE[baseCode];
+      return {
+        ...baseInfo,
+        code: additiveCode.toUpperCase().replace('EN:', 'E'),
+        name: `${baseInfo.name} (variant)`,
+      };
     }
   }
   
@@ -2874,7 +2887,7 @@ export function getAdditiveInfo(additiveCode) {
   
   // Return unknown additive info
   return {
-    code: additiveCode.toUpperCase(),
+    code: additiveCode.toUpperCase().replace('EN:', 'E'),
     name: `Unknown Additive (${additiveCode})`,
     category: 'unknown',
     severity: 'medium',

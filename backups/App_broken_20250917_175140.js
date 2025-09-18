@@ -86,77 +86,78 @@ export default function App() {
 
   // Handle onboarding completion
   const handleOnboardingComplete = async (mode) => {
-    setHasCompletedOnboarding(true);
-    await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
-    
-    if (mode === 'tutorial') {
-      // Start tutorial mode with the special scanner
-      setIsTutorialMode(true);
-      setShowTutorialScanner(true);
-    } else if (mode === 'camera') {
-      // Skip tutorial, go to scanner selector
-      setShowScanSelector(true);
-    } else {
-      // Manual entry
-      setIsScanning(true);
-      setScanMethod('manual');
-    }
-  };
-
+  setHasCompletedOnboarding(true);
+  
+  if (mode === 'tutorial') {
+    // Start tutorial mode with the special scanner
+    setIsTutorialMode(true);
+    setShowTutorialScanner(true);
+  } else if (mode === 'camera') {
+    // Skip tutorial, go to scanner selector
+    setShowScanSelector(true);
+  } else {
+    // Manual entry
+    setIsScanning(true);
+    setScanMethod('manual');
+  }
+};
   // Load history and settings when app starts
   useEffect(() => {
     loadInitialData();
   }, []);
 
-  // Replace your loadInitialData function (lines 106-148) with this:
+  const loadInitialData = async () => {
+    try {
+      // Check onboarding status FIRST
+      const onboardingComplete = await AsyncStorage.getItem('hasCompletedOnboarding');
+      setHasCompletedOnboarding(false);  // Force onboarding to show for testing
 
-const loadInitialData = async () => {
-  try {
-    // TEMPORARY: Force onboarding to show for testing
-    await AsyncStorage.removeItem('hasCompletedOnboarding');
-    setHasCompletedOnboarding(false);
-    
-    // Check onboarding status (this will now always be null/false)
-    const onboardingComplete = await AsyncStorage.getItem('hasCompletedOnboarding');
-    setHasCompletedOnboarding(onboardingComplete === 'true');
-    
-    // Only show splash if onboarding is complete
-    if (onboardingComplete === 'true') {
-      // Fade in splash screen
-      Animated.timing(splashFadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }).start();
-
-      // Hide splash after 2 seconds
-      setTimeout(() => {
+      await AsyncStorage.removeItem('hasCompletedOnboarding');
+await AsyncStorage.removeItem('totalScanCount');
+await AsyncStorage.removeItem('hasSeenTutorialHints');
+await AsyncStorage.removeItem('tutorialCompleted');
+      
+      // Check if this will be their first scan
+      const scanCount = await AsyncStorage.getItem('totalScanCount');
+      setIsFirstScan(!scanCount || parseInt(scanCount) === 0);
+      
+      // Only show splash if onboarding is complete
+      if (onboardingComplete === 'true') {
+        // Fade in splash screen
         Animated.timing(splashFadeAnim, {
-          toValue: 0,
-          duration: 300,
+          toValue: 1,
+          duration: 500,
           useNativeDriver: true,
-        }).start(() => {
-          setShowSplash(false);
-        });
-      }, 2000);
-    } else {
-      setShowSplash(false); // Skip splash for new users
+        }).start();
+
+        // Hide splash after 2 seconds
+        setTimeout(() => {
+          Animated.timing(splashFadeAnim, {
+            toValue: 0,
+            duration: 300,
+            useNativeDriver: true,
+          }).start(() => {
+            setShowSplash(false);
+          });
+        }, 2000);
+      } else {
+        setShowSplash(false); // Skip splash for new users
+      }
+      
+      // Load user settings
+      await loadUserSettings();
+      
+      // Load scan history
+      await loadHistory();
+      
+      // Start animations
+      startPulseAnimation();
+      fadeIn();
+    } catch (error) {
+      console.error('Error loading initial data:', error);
+      setHasCompletedOnboarding(false); // Default to showing onboarding on error
     }
-    
-    // Load user settings
-    await loadUserSettings();
-    
-    // Load scan history
-    await loadHistory();
-    
-    // Start animations
-    startPulseAnimation();
-    fadeIn();
-  } catch (error) {
-    console.error('Error loading initial data:', error.message);
-    setHasCompletedOnboarding(false); // Default to showing onboarding on error
-  }
-};
+  };
 
   // Load user settings
   const loadUserSettings = async () => {
@@ -229,6 +230,25 @@ const loadInitialData = async () => {
     }
   };
 
+  // Handle onboarding completion
+  setHasCompletedOnboarding(true);
+  
+  if (mode === 'tutorial') {
+    // Start tutorial mode with the special scanner
+    setIsTutorialMode(true);
+    setShowTutorialScanner(true);
+  } else if (mode === 'camera') {
+    // Skip tutorial, go to scanner selector
+    setShowScanSelector(true);
+  } else {
+    // Manual entry
+    setIsScanning(true);
+    setScanMethod('manual');
+  }
+};
+
+ 
+ 
   const handleBarcodeScan = async (result) => {
     const barcode = result.data || result;
     // Close all scanners
@@ -372,7 +392,7 @@ const loadInitialData = async () => {
         {children}
       </View>
     );
-  };
+  }
 
   // Show loading while checking onboarding status
   if (hasCompletedOnboarding === null) {
@@ -384,62 +404,35 @@ const loadInitialData = async () => {
   }
 
   // Show onboarding for new users
-  if (hasCompletedOnboarding === false) {
-    console.log('About to render OnboardingScreen');
-    console.log('handleOnboardingComplete exists?', typeof handleOnboardingComplete);
-    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
-  }
+if (hasCompletedOnboarding === false) {
+  console.log('About to render OnboardingScreen');
+  console.log('handleOnboardingComplete exists?', typeof handleOnboardingComplete);
+  return <OnboardingScreen onComplete={handleOnboardingComplete} />;
+}
 
   // SPLASH SCREEN (only for returning users)
   if (showSplash) {
     return <SplashScreen splashFadeAnim={splashFadeAnim} styles={{}} />;
   }
-// ADD THESE DEBUG LOGS
-console.log('=== SCREEN DECISION LOGIC ===');
-console.log('showSplash:', showSplash);
-console.log('hasCompletedOnboarding:', hasCompletedOnboarding);
-console.log('showTutorialScanner:', showTutorialScanner);
-console.log('isLoading:', isLoading);
-console.log('showResult:', showResult);
-console.log('activeTab:', activeTab);
-console.log('=== END LOGIC ===');
 
   // Tutorial Scanner Modal
-if (showTutorialScanner) {
-  console.log('showTutorialScanner is true, attempting to render TutorialScanner');
-  console.log('TutorialScanner component exists?', typeof TutorialScanner);
-  
-  try {
+  if (showTutorialScanner) {
     return (
       <TutorialScanner
-        onScanResult={(result) => {
-          console.log('TutorialScanner onScanResult called with:', result);
-          handleBarcodeScan(result);
-        }}
+        onScanResult={handleBarcodeScan}
         onClose={() => {
-          console.log('TutorialScanner onClose called');
           setShowTutorialScanner(false);
           setIsTutorialMode(false);
         }}
       />
     );
-  } catch (error) {
-    console.error('Error rendering TutorialScanner:', error);
-    return (
-      <View style={{ flex: 1, backgroundColor: 'red', justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: 'white' }}>Error: {error.message}</Text>
-      </View>
-    );
   }
-}
 
   // LOADING SCREEN
-  // LOADING SCREEN
-if (isLoading) {
-  console.log('SHOWING LOADING SCREEN INSTEAD!');  // ADD THIS
-  return (
-    <LinearGradient
-      colors={['#667EEA', '#764BA2']}
+  if (isLoading) {
+    return (
+      <LinearGradient
+        colors={['#667EEA', '#764BA2']}
         style={styles.loadingContainer}
       >
         <View style={styles.loadingContent}>
@@ -538,4 +531,3 @@ if (isLoading) {
       />
     </SafeAreaView>
   );
-}

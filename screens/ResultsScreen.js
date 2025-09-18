@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import ProductService from '../services/ProductService';
 import { getGradeGradient, getResultBackgroundColor, getStatusBadgeColor } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
+import { Ionicons } from '@expo/vector-icons';
 
 const ResultsScreen = ({
   currentProduct,
@@ -63,7 +64,7 @@ const ResultsScreen = ({
         <ScrollView showsVerticalScrollIndicator={false}>
           <Animated.View style={[styles.resultContent, { opacity: fadeAnim }]}>
             
-            {/* Product Header */}
+            {/* Product Header - Contains Grade, Product Info, and Status Badge */}
             <View style={[styles.productHeaderCard, { backgroundColor: getResultBackgroundColor(currentProduct.healthScore?.score || 0) }]}>
               <LinearGradient
                 colors={getGradeGradient(currentProduct?.healthScore?.score || 0)}
@@ -124,43 +125,7 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* Critical Additives */}
-            {currentProduct.criticalAdditives && currentProduct.criticalAdditives.length > 0 && (
-              <View style={styles.concernsSection}>
-                <Text style={styles.sectionTitle}>❌ Critical Concerns</Text>
-                {currentProduct.criticalAdditives.map((additive, index) => (
-                  <View key={index} style={styles.concernCard}>
-                    <View style={styles.concernNumberBadge}>
-                      <Text style={styles.concernNumber}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.concernContent}>
-                      <Text style={styles.concernName}>{additive.name}</Text>
-                      <Text style={styles.concernDescription}>{additive.healthImpact}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Concerning Additives */}
-            {currentProduct.concerningAdditives && currentProduct.concerningAdditives.length > 0 && (
-              <View style={styles.concernsSection}>
-                <Text style={styles.sectionTitle}>⚠️ Additional Concerns</Text>
-                {currentProduct.concerningAdditives.map((additive, index) => (
-                  <View key={index} style={[styles.concernCard, { backgroundColor: '#FEF3C7' }]}>
-                    <View style={[styles.concernNumberBadge, { backgroundColor: '#F97316' }]}>
-                      <Text style={styles.concernNumber}>{index + 1}</Text>
-                    </View>
-                    <View style={styles.concernContent}>
-                      <Text style={styles.concernName}>{additive.name}</Text>
-                      <Text style={styles.concernDescription}>{additive.healthImpact}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            {/* Positive Aspects */}
+            {/* Positive Aspects - MOVED UP */}
             {currentProduct.positiveAttributes && currentProduct.positiveAttributes.length > 0 && (
               <View style={styles.positiveSection}>
                 <Text style={styles.sectionTitle}>✅ Positive Aspects</Text>
@@ -203,27 +168,80 @@ const ResultsScreen = ({
               </View>
             )}
 
+            {/* Critical Additives */}
+            {currentProduct.criticalAdditives && currentProduct.criticalAdditives.length > 0 && (
+              <View style={styles.concernsSection}>
+                <Text style={styles.sectionTitle}>❌ Critical Additives</Text>
+                {currentProduct.criticalAdditives.map((additive, index) => (
+                  <View key={index} style={styles.concernCard}>
+                    <View style={styles.concernNumberBadge}>
+                      <Text style={styles.concernNumber}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.concernContent}>
+                      <Text style={styles.concernName}>{additive.name}</Text>
+                      <Text style={styles.concernDescription}>{additive.healthImpact}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* Additives Found - RENAMED from Additional Concerns */}
+            {currentProduct.concerningAdditives && currentProduct.concerningAdditives.length > 0 && (
+              <View style={styles.concernsSection}>
+                <Text style={styles.sectionTitle}>🧪 Additives Found</Text>
+                {currentProduct.concerningAdditives.map((additive, index) => (
+                  <View key={index} style={[styles.concernCard, { backgroundColor: '#FEF3C7' }]}>
+                    <View style={[styles.concernNumberBadge, { backgroundColor: '#F97316' }]}>
+                      <Text style={styles.concernNumber}>{index + 1}</Text>
+                    </View>
+                    <View style={styles.concernContent}>
+                      <Text style={styles.concernName}>{additive.name}</Text>
+                      <Text style={styles.concernDescription}>{additive.healthImpact}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* Action Buttons */}
-            <View style={styles.actionButtons}>
+            <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 20, paddingHorizontal: 15 }}>
               <TouchableOpacity
-                style={[styles.actionButton, styles.scanAgainButton]}
+                style={{ 
+                  flex: 1,
+                  backgroundColor: '#007BFF',
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                }}
                 onPress={() => {
-                  setShowResult(false);
-                  setCurrentProduct(null);
-                  setScanMethod('manual');
-                  setIsScanning(true);
+                  Alert.alert('Success', 'Saved to history!');
                 }}
               >
-                <Text style={styles.scanAgainIcon}>📷</Text>
-                <Text style={styles.scanAgainText}>Scan Again</Text>
+                <Text style={{ color: 'white', fontSize: 16, fontWeight: '700' }}>Save</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
-                style={[styles.actionButton, styles.shareButton]}
+                style={{ 
+                  flex: 1,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  alignItems: 'center',
+                  overflow: 'hidden',
+                }}
                 onPress={() => Alert.alert('Share', 'Sharing feature coming soon!')}
               >
-                <Text style={styles.shareIcon}>🎉</Text>
-                <Text style={styles.shareText}>Share</Text>
+                <LinearGradient
+                  colors={['#E91E63', '#9C27B0']}
+                  style={{ 
+                    position: 'absolute',
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                  }}
+                />
+                <Text style={{ color: 'white', fontSize: 16, fontWeight: '700' }}>Share</Text>
               </TouchableOpacity>
             </View>
           </Animated.View>
