@@ -271,27 +271,33 @@ const ResultsScreen = ({
             )}
 
             {/* Additives Section - NEW */}
-            {(productData.additives || productData.additives_tags) && (
+            {(currentProduct.additives && currentProduct.additives.length > 0) || 
+             (productData.additives_tags && productData.additives_tags.length > 0) ? (
               <View style={styles.additivesSection}>
                 <Text style={styles.sectionTitle}>🧪 Additives</Text>
-                {productData.additives ? (
-                  <Text style={styles.additivesText}>{productData.additives}</Text>
-                ) : productData.additives_tags ? (
-                  <View>
-                    {productData.additives_tags.map((additive, index) => (
+                <View>
+                  {currentProduct.additives && currentProduct.additives.length > 0 ? (
+                    currentProduct.additives.map((additive, index) => (
+                      <Text key={index} style={styles.additiveItem}>
+                        • {additive.code} - {additive.name}
+                        {additive.severity === 'high' && ' ⚠️'}
+                      </Text>
+                    ))
+                  ) : (
+                    productData.additives_tags.map((additive, index) => (
                       <Text key={index} style={styles.additiveItem}>
                         • {additive.replace('en:', '').toUpperCase()}
                       </Text>
-                    ))}
-                  </View>
-                ) : null}
+                    ))
+                  )}
+                </View>
                 {productData.additives_n && (
                   <Text style={styles.additivesCount}>
                     Total additives: {productData.additives_n}
                   </Text>
                 )}
               </View>
-            )}
+            ) : null}
 
             {/* Ingredients Section - NEW */}
             {productData.ingredients_text && (

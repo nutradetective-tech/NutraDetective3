@@ -218,10 +218,7 @@ const HomeScreen = ({
               </View>
             )}
 
-            {/* Ad Banner Placeholder */}
-            <View style={styles.adBanner}>
-              <Text style={styles.adText}>AdMob Banner (320x50)</Text>
-            </View>
+            
           </Animated.View>
         </ScrollView>
 

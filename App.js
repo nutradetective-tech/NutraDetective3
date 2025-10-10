@@ -18,16 +18,12 @@ import {
   TextInput,
 } from 'react-native';
 import { styles } from './styles/AppStyles';
-import HomeScreen from './screens/HomeScreen';
+import HomeScreen from './screens/HomeScreen';  // ✅ Keep this - needed
 import ResultsScreen from './screens/ResultsScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SplashScreen from './screens/SplashScreen';
-import OnboardingScreen from './screens/OnboardingScreen';
-import OverlayHints from './components/OverlayHints';
-import TutorialScanner from './components/TutorialScanner';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MOCK_NUTELLA_DATA } from './constants/mockData';
 import SimpleScanner from './components/SimpleScanner';
 import ProductService from './services/ProductService';
 import EnhancedManualScanner from './components/EnhancedManualScanner';
@@ -73,91 +69,36 @@ export default function App() {
   const [tempGoal, setTempGoal] = useState(5);
   const [tempStats, setTempStats] = useState(['totalScans', 'healthyPercent', 'streak']);
   
-  // Onboarding and tutorial states
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(null);
-  const [isFirstScan, setIsFirstScan] = useState(false);
-  const [showHints, setShowHints] = useState(false);
-  const [isTutorialMode, setIsTutorialMode] = useState(false);
-  const [showTutorialScanner, setShowTutorialScanner] = useState(false);
-  
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const splashFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // Handle onboarding completion
-  const handleOnboardingComplete = async (mode) => {
-    setHasCompletedOnboarding(true);
-    await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
-    
-    if (mode === 'tutorial') {
-      // Start tutorial mode with the special scanner
-      setIsTutorialMode(true);
-      setShowTutorialScanner(true);
-    } else if (mode === 'camera') {
-      // Skip tutorial, go to scanner selector
-      setShowScanSelector(true);
-    } else {
-      // Manual entry
-      setIsScanning(true);
-      setScanMethod('manual');
-    }
-  };
-
   // Load history and settings when app starts
   useEffect(() => {
-    loadInitialData();
-  }, []);
+    // Fade in splash screen
+    Animated.timing(splashFadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
 
-  // Replace your loadInitialData function (lines 106-148) with this:
-
-const loadInitialData = async () => {
-  try {
-    // TEMPORARY: Force onboarding to show for testing
-    await AsyncStorage.removeItem('hasCompletedOnboarding');
-    setHasCompletedOnboarding(false);
-    
-    // Check onboarding status (this will now always be null/false)
-    const onboardingComplete = await AsyncStorage.getItem('hasCompletedOnboarding');
-    setHasCompletedOnboarding(onboardingComplete === 'true');
-    
-    // Only show splash if onboarding is complete
-    if (onboardingComplete === 'true') {
-      // Fade in splash screen
+    // Hide splash after 2 seconds
+    setTimeout(() => {
       Animated.timing(splashFadeAnim, {
-        toValue: 1,
-        duration: 500,
+        toValue: 0,
+        duration: 300,
         useNativeDriver: true,
-      }).start();
-
-      // Hide splash after 2 seconds
-      setTimeout(() => {
-        Animated.timing(splashFadeAnim, {
-          toValue: 0,
-          duration: 300,
-          useNativeDriver: true,
-        }).start(() => {
-          setShowSplash(false);
-        });
-      }, 2000);
-    } else {
-      setShowSplash(false); // Skip splash for new users
-    }
+      }).start(() => {
+        setShowSplash(false);
+      });
+    }, 2000);
     
-    // Load user settings
-    await loadUserSettings();
-    
-    // Load scan history
-    await loadHistory();
-    
-    // Start animations
+    loadUserSettings();
+    loadHistory();
     startPulseAnimation();
     fadeIn();
-  } catch (error) {
-    console.error('Error loading initial data:', error.message);
-    setHasCompletedOnboarding(false); // Default to showing onboarding on error
-  }
-};
+  }, []);
 
   // Load user settings
   const loadUserSettings = async () => {
@@ -230,122 +171,82 @@ const loadInitialData = async () => {
     }
   };
 
-  const handleBarcodeScan = async (result, isTutorial = false) => {
-  // Tutorial mode - use mock data directly
-  if (isTutorial) {
-    console.log('Tutorial mode - using mock data');
-    console.log('Mock data being set:', JSON.stringify(result, null, 2));
-    setCurrentProduct(result); // result is already the mock product data
-    setShowResult(true);
-    setIsScanning(false);
-    setShowTutorialScanner(false);
-    setShowHints(true);
-    // Don't make API call
-    return;
-  }
-    
-    // Process after modal closes
-    setTimeout(async () => {
-      setIsLoading(true);
-      
-      try {
-        const product = await ProductService.fetchProductByBarcode(barcode);
-        
-        if (product) {
-          // Check for user's allergens
-          if (userSettings.activeFilters && userSettings.activeFilters.length > 0) {
-            const allergenWarnings = ProductService.checkUserAllergens(product, userSettings.activeFilters);
-            if (allergenWarnings.length > 0) {
-              product.healthScore.warnings = [
-                ...allergenWarnings,
-                ...(product.healthScore.warnings || [])
-              ];
-            }
-          }
-          
-          product.barcode = barcode;
-          setCurrentProduct(product);
-          
-          // Track scan count
-          const currentCount = await AsyncStorage.getItem('totalScanCount');
-          const newCount = currentCount ? parseInt(currentCount) + 1 : 1;
-          await AsyncStorage.setItem('totalScanCount', newCount.toString());
-          
-          // Show hints for tutorial or first scan
-          if (isTutorialMode || isFirstScan) {
-            setShowHints(true);
-            // Mark tutorial as complete if it was tutorial mode
-            if (isTutorialMode) {
-              await AsyncStorage.setItem('tutorialCompleted', 'true');
-              setIsTutorialMode(false);
-            }
-            setIsFirstScan(false);
-          }
-          
-          setShowResult(true);
-          await saveToHistory(product);
-        } else {
-          // In tutorial mode, this shouldn't happen since we're using a known product
-          if (isTutorialMode) {
-            Alert.alert(
-              'Tutorial Error',
-              'The demo product couldn\'t be loaded. Please check your internet connection and try again.',
-              [
-                { 
-                  text: 'Retry', 
-                  onPress: () => {
-                    setShowTutorialScanner(true);
-                  }
-                },
-                { text: 'Skip Tutorial', onPress: () => setIsTutorialMode(false) }
-              ]
-            );
-          } else {
-            Alert.alert(
-              'Product Not Found',
-              'This product is not in our database yet. Try another product.',
-              [
-                { text: 'Try Again', onPress: () => {
-                  setScanMethod('manual');
-                  setIsScanning(true);
-                }},
-                { text: 'Cancel', style: 'cancel' }
-              ]
-            );
-          }
-        }
-      } catch (error) {
-        Alert.alert('Error', 'Failed to fetch product data');
-      } finally {
-        setIsLoading(false);
-      }
-    }, 100);
-  };
-
-  const handleHistoryItemPress = async (item) => {
-    setActiveTab('home');
+  const handleBarcodeScan = (result) => {
+  const barcode = result.data || result;
+  
+  // Close modal immediately
+  setIsScanning(false);
+  setScanMethod(null);
+  setShowCameraScanner(false);
+  console.log('Starting product fetch');
+  // Process after modal closes
+  setTimeout(async () => {
     setIsLoading(true);
     
-    // Process after delay to show loading screen
-    setTimeout(async () => {
-      try {
-        const product = await ProductService.fetchProductByBarcode(item.barcode);
-        
-        if (product) {
-          product.barcode = item.barcode;
-          setCurrentProduct(product);
-          setShowResult(true);
-          // NOT calling saveToHistory - it's already in history!
-        } else {
-          Alert.alert('Error', 'Could not load product details');
+    try {
+      const product = await ProductService.fetchProductByBarcode(barcode);
+      
+      if (product) {
+        // Check for user's allergens
+        if (userSettings.activeFilters && userSettings.activeFilters.length > 0) {
+          const allergenWarnings = ProductService.checkUserAllergens(product, userSettings.activeFilters);
+          if (allergenWarnings.length > 0) {
+            product.healthScore.warnings = [
+              ...allergenWarnings,
+              ...(product.healthScore.warnings || [])
+            ];
+          }
         }
-      } catch (error) {
-        Alert.alert('Error', 'Failed to fetch product data');
-      } finally {
-        setIsLoading(false);
+        
+        product.barcode = barcode;
+        setCurrentProduct(product);
+        setShowResult(true);
+        await saveToHistory(product);
+      } else {
+        Alert.alert(
+          'Product Not Found',
+          'This product is not in our database yet. Try another product.',
+          [
+            { text: 'Try Again', onPress: () => {
+              setScanMethod('manual');
+              setIsScanning(true);
+            }},
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
       }
-    }, 100);
-  };
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch product data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, 100);
+};
+
+  const handleHistoryItemPress = async (item) => {
+  setActiveTab('home');
+  setIsLoading(true);
+  
+  // Process after delay to show loading screen
+  setTimeout(async () => {
+    try {
+      const product = await ProductService.fetchProductByBarcode(item.barcode);
+      
+      if (product) {
+        product.barcode = item.barcode;
+        setCurrentProduct(product);
+        setShowResult(true);
+        // NOT calling saveToHistory - it's already in history!
+      } else {
+        Alert.alert('Error', 'Could not load product details');
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to fetch product data');
+    } finally {
+      setIsLoading(false);
+    }
+  }, 100);
+};
 
   const clearHistory = () => {
     Alert.alert(
@@ -366,6 +267,7 @@ const loadInitialData = async () => {
     );
   };
 
+  
   // Responsive container wrapper
   const ResponsiveContainer = ({ children, style }) => {
     return (
@@ -380,72 +282,16 @@ const loadInitialData = async () => {
     );
   };
 
-  // Show loading while checking onboarding status
-  if (hasCompletedOnboarding === null) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#1a1a1a', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#667EEA" />
-      </View>
-    );
-  }
-
-  // Show onboarding for new users
-  if (hasCompletedOnboarding === false) {
-    console.log('About to render OnboardingScreen');
-    console.log('handleOnboardingComplete exists?', typeof handleOnboardingComplete);
-    return <OnboardingScreen onComplete={handleOnboardingComplete} />;
-  }
-
-  // SPLASH SCREEN (only for returning users)
+  // SPLASH SCREEN
   if (showSplash) {
     return <SplashScreen splashFadeAnim={splashFadeAnim} styles={{}} />;
   }
-// ADD THESE DEBUG LOGS
-console.log('=== SCREEN DECISION LOGIC ===');
-console.log('showSplash:', showSplash);
-console.log('hasCompletedOnboarding:', hasCompletedOnboarding);
-console.log('showTutorialScanner:', showTutorialScanner);
-console.log('isLoading:', isLoading);
-console.log('showResult:', showResult);
-console.log('activeTab:', activeTab);
-console.log('=== END LOGIC ===');
-
-  // Tutorial Scanner Modal
-if (showTutorialScanner) {
-  console.log('showTutorialScanner is true, attempting to render TutorialScanner');
-  console.log('TutorialScanner component exists?', typeof TutorialScanner);
-  
-  try {
-    return (
-      <TutorialScanner
-        onScanResult={() => {
-  console.log('TutorialScanner onScanResult called with mock data');
-  handleBarcodeScan(MOCK_NUTELLA_DATA, true); // Pass mock data and tutorial flag
-}}
-        onClose={() => {
-          console.log('TutorialScanner onClose called');
-          setShowTutorialScanner(false);
-          setIsTutorialMode(false);
-        }}
-      />
-    );
-  } catch (error) {
-    console.error('Error rendering TutorialScanner:', error);
-    return (
-      <View style={{ flex: 1, backgroundColor: 'red', justifyContent: 'center', alignItems: 'center' }}>
-        <Text style={{ color: 'white' }}>Error: {error.message}</Text>
-      </View>
-    );
-  }
-}
 
   // LOADING SCREEN
-  // LOADING SCREEN
-if (isLoading) {
-  console.log('SHOWING LOADING SCREEN INSTEAD!');  // ADD THIS
-  return (
-    <LinearGradient
-      colors={['#667EEA', '#764BA2']}
+  if (isLoading) {
+    return (
+      <LinearGradient
+        colors={['#667EEA', '#764BA2']}
         style={styles.loadingContainer}
       >
         <View style={styles.loadingContent}>
@@ -459,28 +305,19 @@ if (isLoading) {
     );
   }
 
-  // RESULTS SCREEN with hints overlay
+  // RESULTS SCREEN
   if (showResult && currentProduct) {
     return (
-      <View style={{ flex: 1 }}>
-        <ResultsScreen
-          currentProduct={currentProduct}
-          userSettings={userSettings}
-          setShowResult={setShowResult}
-          setCurrentProduct={setCurrentProduct}
-          setScanMethod={setScanMethod}
-          setIsScanning={setIsScanning}
-          fadeAnim={fadeAnim}
-          styles={styles}
-        />
-        {showHints && (
-          <OverlayHints
-            currentScreen="results"
-            onDismiss={() => setShowHints(false)}
-            isTutorial={isTutorialMode}
-          />
-        )}
-      </View>
+      <ResultsScreen
+        currentProduct={currentProduct}
+        userSettings={userSettings}
+        setShowResult={setShowResult}
+        setCurrentProduct={setCurrentProduct}
+        setScanMethod={setScanMethod}
+        setIsScanning={setIsScanning}
+        fadeAnim={fadeAnim}
+        styles={styles}
+      />
     );
   }
 
@@ -544,4 +381,5 @@ if (isLoading) {
       />
     </SafeAreaView>
   );
-}
+}  // This closes the App function
+
