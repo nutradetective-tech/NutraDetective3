@@ -11,6 +11,7 @@ import {
   Image,
   Alert,
 } from 'react-native';
+import { Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import ProductService from '../services/ProductService';
 import { getGradeGradient, getResultBackgroundColor, getStatusBadgeColor } from '../utils/calculations';
@@ -114,13 +115,14 @@ const ResultsScreen = ({
               </View>
 
               <View style={styles.productInfo}>
-                <Text style={styles.productName}>
-                  {currentProduct.name || currentProduct.product_name || 'Unknown Product'}
-                </Text>
-                <Text style={styles.productBrand}>
-                  {currentProduct.brand || currentProduct.brands || 'Unknown Brand'} • {currentProduct.categories?.split(',')[0] || 'Food Product'}
-                </Text>
-              </View>
+  <Text style={styles.productName}>
+    {currentProduct.name || currentProduct.product_name || 'Unknown Product'}
+  </Text>
+  <Text style={styles.productBrand}>
+    {currentProduct.brand || currentProduct.brands || 'Unknown Brand'} • {currentProduct.categories?.split(',')[0] || 'Food Product'}
+  </Text>
+  
+</View>
 
               <View style={styles.statusContainer}>
                 <View style={[styles.statusBadge, { backgroundColor: getStatusBadgeColor(currentProduct.healthScore?.score || 0) }]}>
@@ -222,9 +224,23 @@ const ResultsScreen = ({
                     </>
                   )}
                 </View>
-                {productData.serving_size && (
-                  <Text style={styles.servingSizeText}>Serving size: {productData.serving_size}</Text>
-                )}
+ 
+{productData.serving_size && (
+  <View style={styles.nutritionItem}>
+    <Text style={styles.nutritionLabel}>Serving Size</Text>
+    <Text style={styles.nutritionValue}>{productData.serving_size}</Text>
+  </View>
+)}
+
+{/* ADD CONTAINER SIZE */}
+{(productData.quantity || currentProduct.netQuantity) && (
+  <View style={styles.nutritionItem}>
+    <Text style={styles.nutritionLabel}>Container Size</Text>
+    <Text style={styles.nutritionValue}>
+      {productData.quantity || currentProduct.netQuantity}
+    </Text>
+  </View>
+)}
               </View>
             )}
 
@@ -274,7 +290,7 @@ const ResultsScreen = ({
             {(currentProduct.additives && currentProduct.additives.length > 0) || 
              (productData.additives_tags && productData.additives_tags.length > 0) ? (
               <View style={styles.additivesSection}>
-                <Text style={styles.sectionTitle}>🧪 Additives</Text>
+                <Text style={styles.sectionTitle}>🧪 Additives Found</Text>
                 <View>
                   {currentProduct.additives && currentProduct.additives.length > 0 ? (
                     currentProduct.additives.map((additive, index) => (
@@ -376,7 +392,25 @@ const ResultsScreen = ({
                   alignItems: 'center',
                   overflow: 'hidden',
                 }}
-                onPress={() => Alert.alert('Share', 'Sharing feature coming soon!')}
+                onPress={async () => {
+  const shareMessage = `🔍 NutraDetective Scan Results\n\n` +
+    `📦 ${currentProduct.name}\n` +
+    `🏷️ ${currentProduct.brand}\n` +
+    `📊 Grade: ${currentProduct.healthScore?.grade || '?'}\n` +
+    `⭐ Score: ${currentProduct.healthScore?.score || 0}/100\n\n` +
+    `${currentProduct.healthScore?.status || 'Unknown Status'}\n\n` +
+    `Scanned with NutraDetective\n` +
+    `Download: nutradetective.com`;
+
+  try {
+    await Share.share({
+      message: shareMessage,
+      title: 'NutraDetective Scan Results'
+    });
+  } catch (error) {
+    Alert.alert('Error', 'Could not share results');
+  }
+}}
               >
                 <LinearGradient
                   colors={['#E91E63', '#9C27B0']}
@@ -400,6 +434,26 @@ const ResultsScreen = ({
 
 // Add these additional styles to your AppStyles.js
 const additionalStyles = StyleSheet.create({
+  servingSizeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#F3F4F6',
+    borderRadius: 8,
+    alignSelf: 'center',
+  },
+  servingSizeLabel: {
+    fontSize: 13,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  servingSizeValue: {
+    fontSize: 13,
+    color: '#1F2937',
+    fontWeight: '700',
+  },
   allergensSection: {
     backgroundColor: 'white',
     marginHorizontal: 15,

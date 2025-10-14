@@ -1,9 +1,8 @@
 // services/ProductService.js
 // NutraDetective - Evidence-Based Nutritional Scoring System
-// Version 2.5 - Enhanced Harmful Additives Detection + Product Caching
-// INCLUDES: Nutritionix Fix, Spoonacular API, Enhanced Scoring, Complete Harmful Detection, Product Cache
+// Version 2.5 - Enhanced Harmful Additives Detection
+// INCLUDES: Nutritionix Fix, Spoonacular API, Enhanced Scoring, Complete Harmful Detection
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAdditiveInfo } from './additives-database';
 import { HARMFUL_INGREDIENTS_DATABASE } from './harmful-ingredients-master';
 
@@ -13,44 +12,19 @@ const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWl
 class ProductService {
   // API Keys - Get these free from each service
   static API_KEYS = {
-    USDA: '5QlF40l69GTeey5t3lPgc02BcWOthCTg6ZaAbZW9',
-    NUTRITIONIX_ID: '393c1557',
+    USDA: '5QlF40l69GTeey5t3lPgc02BcWOthCTg6ZaAbZW9', // Get from https://fdc.nal.usda.gov/api-key-signup.html
+    NUTRITIONIX_ID: '393c1557', // Get from nutritionix.com/business/api
     NUTRITIONIX_KEY: '6cefab30a7a318a0cfb93fa2263ec883',
-    SPOONACULAR: '1f66fca067fe49bca59115e88fde84ac',
-    EDAMAM_ID: '',
+    SPOONACULAR: '1f66fca067fe49bca59115e88fde84ac', // 150 calls/day free
+    EDAMAM_ID: '', // Get from developer.edamam.com
     EDAMAM_KEY: ''
   };
 
   /**
    * Main function called by App.js - maintains backward compatibility
-   * ENHANCED: Now includes product images, detailed additives, and product caching
+   * ENHANCED: Now includes product images and detailed additives
    */
   static async fetchProductByBarcode(barcode) {
-    // 🔥 CHECK PRODUCT CACHE FIRST
-    try {
-      const cacheKey = `product_cache_${barcode}`;
-      const cachedData = await AsyncStorage.getItem(cacheKey);
-      
-      if (cachedData) {
-        const cached = JSON.parse(cachedData);
-        const cacheAge = Date.now() - new Date(cached.cachedAt).getTime();
-        const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
-        
-        if (cacheAge < maxAge) {
-          console.log('✅ Using cached product data (age: ' + Math.round(cacheAge / (24 * 60 * 60 * 1000)) + ' days)');
-          return cached.product;
-        } else {
-          console.log('⚠️ Cache expired, fetching fresh data');
-        }
-      }
-    } catch (error) {
-      console.log('Cache read error:', error);
-    }
-    
-    // Continue with normal API calls...
-    const getEnglishText = (prod, field) => {
-      return prod[`${field}_en`] || prod[`${field}_eng`] || prod[field] || '';
-    };
     console.log('🔍 Searching for barcode:', barcode);
     console.log('📊 API Status - USDA Key:', this.API_KEYS.USDA ? 'Present' : 'Missing');
     let product = null;
@@ -87,7 +61,6 @@ class ProductService {
       
       if (data.status === 1 && data.product) {
         product = data.product;
-        product.ingredients_text = getEnglishText(product, 'ingredients_text');
         source = 'Open Food Facts';
         sourcesUsed.push('Open Food Facts');
         console.log('✅ Found in Open Food Facts:', product.product_name);
@@ -118,6 +91,7 @@ class ProductService {
             product = usdaProduct;
             source = 'USDA';
           } else {
+            // Merge missing data
             product.product_name = product.product_name || usdaProduct.product_name;
             product.brands = product.brands || usdaProduct.brands;
             product.ingredients_text = product.ingredients_text || usdaProduct.ingredients_text;
@@ -216,6 +190,7 @@ class ProductService {
         return {
           name: product.product_name || 'Unknown Product',
           brand: product.brands || 'Unknown Brand',
+          // NEW: Add image even for insufficient data
           image: this.getProductImage(product),
           healthScore: {
             score: 0,
@@ -238,31 +213,32 @@ class ProductService {
       const healthScore = this.calculateHealthScore(product);
       console.log('✅ Final grade:', healthScore.grade, 'Score:', healthScore.score);
       
-      // Process additives with detailed information
+      // NEW: Process additives with detailed information
       console.log('Additives tags:', product.additives_tags);
       const detailedAdditives = this.processDetailedAdditives(product.additives_tags || []);
       
-      // Get positive attributes
+      // NEW: Get positive attributes
       const positiveAttributes = this.getPositiveAttributes(product);
       
       // Return in format expected by App.js WITH NEW ENHANCEMENTS
-      const finalProduct = {
+      return {
         name: product.product_name || 'Unknown Product',
         brand: product.brands || 'Unknown Brand',
         
-        // Image data
+        // NEW: Image data
         image: this.getProductImage(product),
         imageUrl: product.image_front_url || product.image_url || null,
         
-        // Enhanced additives information
+        // NEW: Enhanced additives information
         additives: detailedAdditives.all,
         criticalAdditives: detailedAdditives.critical,
         concerningAdditives: detailedAdditives.concerning,
         minorAdditives: detailedAdditives.minor,
         
-        // Positive attributes
+        // NEW: Positive attributes
         positiveAttributes: positiveAttributes,
         healthScore: healthScore,
+        // NEW: Additional product info
         ingredients: product.ingredients_text || '',
         categories: product.categories || '',
 
@@ -278,7 +254,8 @@ class ProductService {
           fat: product.nutriments?.['fat_100g'] || 0
         },
 
-        // Ingredients list
+        // Ingredients
+        ingredients: product.ingredients_text || 'Not available',
         ingredientsList: product.ingredients || [],
 
         // Allergens
@@ -289,31 +266,19 @@ class ProductService {
         servingSize: product.serving_size || '100g',
         novaGroup: product.nova_group || null,
         nutriscoreGrade: product.nutriscore_grade || null,
+        categories: product.categories || '',
         barcode: barcode,
         
-        // Color coding for UI
+        // NEW: Color coding for UI
         healthColor: this.getHealthColor(healthScore.grade),
         cardBackgroundColor: this.getCardBackgroundColor(healthScore.grade),
         
         // Existing fields
+        healthScore: healthScore,
         missingData: false,
         source: source,
         rawData: product
       };
-      
-      // 🔥 SAVE TO CACHE FOR NEXT TIME
-      try {
-        const cacheKey = `product_cache_${barcode}`;
-        await AsyncStorage.setItem(cacheKey, JSON.stringify({
-          product: finalProduct,
-          cachedAt: new Date().toISOString()
-        }));
-        console.log('✅ Product cached for future scans');
-      } catch (error) {
-        console.log('Cache write error:', error);
-      }
-      
-      return finalProduct;
     }
     
     console.log('❌ Product not found in any database');
@@ -321,20 +286,22 @@ class ProductService {
   }
 
   /**
-   * Get product image with fallback
+   * NEW FUNCTION: Get product image with fallback
    */
   static getProductImage(product) {
+    // Priority order for images
     const imageUrl = product.image_front_url || 
                     product.image_url || 
                     product.image_front_small_url ||
                     product.image_small_url ||
                     product.image_thumb_url;
     
+    // Return the image URL or placeholder
     return imageUrl || PLACEHOLDER_IMAGE;
   }
 
   /**
-   * Process additives with detailed information
+   * NEW FUNCTION: Process additives with detailed information
    */
   static processDetailedAdditives(additivesTags) {
     if (!additivesTags || additivesTags.length === 0) {
@@ -347,9 +314,10 @@ class ProductService {
     }
     
     const processedAdditives = additivesTags.map((tag, index) => {
+      // Handle Open Food Facts format (en:e150c) 
       let cleanTag = tag;
       if (tag.includes(':')) {
-        cleanTag = tag.split(':')[1];
+        cleanTag = tag.split(':')[1]; // Get e150c from en:e150c
       }
       
       const additiveInfo = getAdditiveInfo(cleanTag);
@@ -372,17 +340,19 @@ class ProductService {
   }
 
   /**
-   * Get positive attributes of the product
+   * NEW FUNCTION: Get positive attributes of the product
    */
   static getPositiveAttributes(product) {
     const attributes = [];
     const ingredients = (product.ingredients_text || '').toLowerCase();
     const labels = (product.labels || '').toLowerCase();
     
+    // Organic
     if (labels.includes('organic') || ingredients.includes('organic')) {
       attributes.push('USDA Organic certified');
     }
     
+    // Low/No sugar
     const sugars = product.nutriments?.sugars_100g || 0;
     if (sugars === 0) {
       attributes.push('No sugar');
@@ -390,11 +360,13 @@ class ProductService {
       attributes.push('Low sugar');
     }
     
+    // Low sodium
     const sodium = product.nutriments?.sodium_100g || 0;
     if (sodium < 0.3) {
       attributes.push('Low sodium');
     }
     
+    // High fiber
     const fiber = product.nutriments?.fiber_100g || 0;
     if (fiber > 6) {
       attributes.push('High fiber');
@@ -402,6 +374,7 @@ class ProductService {
       attributes.push('Good source of fiber');
     }
     
+    // High protein
     const protein = product.nutriments?.proteins_100g || 0;
     if (protein > 20) {
       attributes.push('High protein');
@@ -409,28 +382,34 @@ class ProductService {
       attributes.push('Good source of protein');
     }
     
+    // Vegan/Vegetarian
     if (labels.includes('vegan')) {
       attributes.push('Vegan');
     } else if (labels.includes('vegetarian')) {
       attributes.push('Vegetarian');
     }
     
+    // Non-GMO
     if (labels.includes('non-gmo') || labels.includes('non gmo')) {
       attributes.push('Non-GMO Project Verified');
     }
     
+    // Gluten-free
     if (labels.includes('gluten-free') || labels.includes('gluten free')) {
       attributes.push('Certified Gluten-Free');
     }
     
+    // No artificial additives
     if (!product.additives_tags || product.additives_tags.length === 0) {
       attributes.push('No artificial additives');
     }
     
+    // Whole grain
     if (ingredients.includes('whole grain') || ingredients.includes('whole wheat')) {
       attributes.push('Contains whole grains');
     }
     
+    // Low calorie
     const calories = product.nutriments?.['energy-kcal_100g'] || 0;
     if (calories === 0) {
       attributes.push('Zero calories');
@@ -442,49 +421,53 @@ class ProductService {
   }
 
   /**
-   * Get color for UI based on grade
+   * NEW FUNCTION: Get color for UI based on grade
    */
   static getHealthColor(grade) {
     const colors = {
-      'A': '#10B981',
-      'A-': '#34D399',
-      'B+': '#84CC16',
-      'B': '#A3E635',
-      'B-': '#BEF264',
-      'C+': '#F59E0B',
-      'C': '#FBBF24',
-      'C-': '#FCD34D',
-      'D+': '#F97316',
-      'D': '#FB923C',
-      'D-': '#FDBA74',
-      'F': '#EF4444'
+      'A': '#10B981',   // Green
+      'A-': '#34D399',  // Light Green
+      'B+': '#84CC16',  // Lime Green
+      'B': '#A3E635',   // Light Lime
+      'B-': '#BEF264',  // Pale Lime
+      'C+': '#F59E0B',  // Yellow
+      'C': '#FBBF24',   // Light Yellow
+      'C-': '#FCD34D',  // Pale Yellow
+      'D+': '#F97316',  // Orange
+      'D': '#FB923C',   // Light Orange
+      'D-': '#FDBA74',  // Pale Orange
+      'F': '#EF4444'    // Red
     };
-    return colors[grade] || '#6B7280';
+    return colors[grade] || '#6B7280'; // Gray for unknown
   }
 
   /**
-   * Get background color for product card
+   * NEW FUNCTION: Get background color for product card
    */
   static getCardBackgroundColor(grade) {
     const colors = {
-      'A': '#DCFCE7',
-      'A-': '#D1FAE5',
-      'B+': '#ECFCCB',
-      'B': '#F0FDF4',
-      'B-': '#F7FEE7',
-      'C+': '#FEF3C7',
-      'C': '#FEF9C3',
-      'C-': '#FEFCE8',
-      'D+': '#FED7AA',
-      'D': '#FFEDD5',
-      'D-': '#FEF2E8',
-      'F': '#FEE2E2'
+      'A': '#DCFCE7',   // Light Green
+      'A-': '#D1FAE5',  // Lighter Green
+      'B+': '#ECFCCB',  // Light Lime
+      'B': '#F0FDF4',   // Very Light Green
+      'B-': '#F7FEE7',  // Pale Lime
+      'C+': '#FEF3C7',  // Light Yellow
+      'C': '#FEF9C3',   // Lighter Yellow
+      'C-': '#FEFCE8',  // Pale Yellow
+      'D+': '#FED7AA',  // Light Orange
+      'D': '#FFEDD5',   // Lighter Orange
+      'D-': '#FEF2E8',  // Pale Orange
+      'F': '#FEE2E2'    // Light Red
     };
-    return colors[grade] || '#F3F4F6';
+    return colors[grade] || '#F3F4F6'; // Light Gray for unknown
   }
 
+  // ============================================
+  // ALL YOUR EXISTING FUNCTIONS BELOW - UNCHANGED
+  // ============================================
+
   /**
-   * USDA FoodData Central API
+   * NEW: USDA FoodData Central API
    */
   static async fetchFromUSDA(barcode) {
     console.log('🔄 USDA API call with key:', this.API_KEYS.USDA.substring(0, 10) + '...');
@@ -504,6 +487,7 @@ class ProductService {
     if (data.foods && data.foods.length > 0) {
       const food = data.foods[0];
       
+      // Convert USDA format to Open Food Facts format
       const nutrients = {};
       if (food.foodNutrients) {
         food.foodNutrients.forEach(nutrient => {
@@ -513,7 +497,7 @@ class ProductService {
               nutrients['sugars_100g'] = nutrient.value;
               break;
             case 'Sodium, Na':
-              nutrients['sodium_100g'] = nutrient.value / 10;
+              nutrients['sodium_100g'] = nutrient.value / 10; // Convert mg to per 100g
               break;
             case 'Fatty acids, total saturated':
               nutrients['saturated-fat_100g'] = nutrient.value;
@@ -543,7 +527,7 @@ class ProductService {
   }
 
   /**
-   * Nutritionix API
+   * Nutritionix API - FIXED VERSION
    */
   static async fetchFromNutritionix(barcode) {
     try {
@@ -557,6 +541,7 @@ class ProductService {
         }
       );
       
+      // Check if response is OK
       if (!response.ok) {
         console.log('Nutritionix response not OK:', response.status);
         return null;
@@ -564,6 +549,7 @@ class ProductService {
       
       const data = await response.json();
       
+      // Check if we have foods in the response
       if (!data || !data.foods || data.foods.length === 0) {
         console.log('❌ Not found in Nutritionix');
         return null;
@@ -571,11 +557,14 @@ class ProductService {
       
       const food = data.foods[0];
       
+      // Ensure we have required fields before calculating
       if (!food.serving_weight_grams || food.serving_weight_grams === 0) {
         console.log('Missing serving weight in Nutritionix data');
         return null;
       }
       
+      // Convert Nutritionix format to Open Food Facts format
+      // Use safe calculation with fallbacks
       const servingWeight = food.serving_weight_grams || 100;
       
       return {
@@ -602,144 +591,198 @@ class ProductService {
   }
 
   /**
-   * Spoonacular API
+   * Spoonacular API - ENHANCED VERSION with proper formatting and additive detection
    */
   static async fetchFromSpoonacular(barcode) {
-    const apiKey = '1f66fca067fe49bca59115e88fde84ac';
-    const url = `https://api.spoonacular.com/food/products/upc/${barcode}?apiKey=${apiKey}`;
+  const apiKey = '1f66fca067fe49bca59115e88fde84ac';
+  const url = `https://api.spoonacular.com/food/products/upc/${barcode}?apiKey=${apiKey}`;
+  
+  try {
+    console.log('🔍 Fetching from Spoonacular for barcode:', barcode);
+    console.log('🌐 Full URL:', url);
+    const response = await fetch(url);
     
-    try {
-      console.log('🔍 Fetching from Spoonacular for barcode:', barcode);
-      const response = await fetch(url);
-      
-      console.log('📡 Spoonacular response status:', response.status);
-      
-      if (!response.ok) {
-        console.log('❌ Spoonacular response not OK:', response.status);
-        return null;
-      }
-      
-      const data = await response.json();
-      
-      console.log('🔴 COMPLETE SPOONACULAR RAW DATA:');
-      console.log(JSON.stringify(data, null, 2));
-      
-      if (!data || !data.title) {
-        console.log('❌ Invalid Spoonacular data structure');
-        return null;
-      }
-
-      const ingredientsText = data.ingredientList || '';
-      const ingredientsLower = ingredientsText.toLowerCase();
-      
-      const detectedAdditives = [];
-      const additivePatterns = [
-        /\be\d{3}[a-z]?\b/gi,
-        /\b(lecithin|vanillin|maltodextrin|dextrose|xanthan|guar|carrageenan|citric acid|ascorbic acid|tocopherol|caramel color|annatto)\b/gi,
-        /\b(artificial|imitation|synthetic)\s+\w+/gi,
-        /\b(sodium benzoate|potassium sorbate|bha|bht|tbhq|sodium nitrite)\b/gi,
-        /\b(aspartame|sucralose|saccharin|acesulfame|stevia|sorbitol|xylitol)\b/gi,
-        /\b(msg|monosodium glutamate|disodium inosinate|disodium guanylate|autolyzed yeast)\b/gi
-      ];
-      
-      additivePatterns.forEach(pattern => {
-        const matches = ingredientsText.match(pattern);
-        if (matches) {
-          matches.forEach(match => {
-            if (!detectedAdditives.includes(match.toLowerCase())) {
-              detectedAdditives.push(match.toLowerCase());
-            }
-          });
-        }
-      });
-
-      let novaLevel = 1;
-      
-      if (ingredientsLower.includes('artificial') || 
-          ingredientsLower.includes('modified') ||
-          ingredientsLower.includes('hydrogenated') ||
-          detectedAdditives.length > 5) {
-        novaLevel = 4;
-      } else if (detectedAdditives.length > 2 || 
-                 ingredientsLower.includes('preservative')) {
-        novaLevel = 3;
-      } else if (data.ingredientCount > 5) {
-        novaLevel = 2;
-      }
-
-      if (ingredientsLower.includes('carbonated') && ingredientsLower.includes('sugar') && 
-          (ingredientsLower.includes('caramel') || ingredientsLower.includes('phosphoric'))) {
-        novaLevel = 4;
-      }
-
-      if (ingredientsLower.includes('natural flavour') || ingredientsLower.includes('natural flavor')) {
-        if (!detectedAdditives.includes('natural flavoring')) {
-          detectedAdditives.push('natural flavoring');
-        }
-      }
-
-      const nutrition = data.nutrition || {};
-      const nutrients = nutrition.nutrients || [];
-      
-      let sugarValue = 0;
-      if (nutrition.sugar) {
-        sugarValue = parseFloat(nutrition.sugar.replace(/[^0-9.]/g, ''));
-      } else if (nutrients.length > 0) {
-        const sugarNutrient = nutrients.find(n => 
-          n.name.toLowerCase().includes('sugar') && 
-          !n.name.toLowerCase().includes('added')
-        );
-        if (sugarNutrient) {
-          sugarValue = sugarNutrient.amount || 0;
-        }
-      }
-      
-      const formattedProduct = {
-        product_name: data.title,
-        brands: data.brand || 'Unknown Brand',
-        
-        nutriments: {
-          'calories': Math.round((nutrition.calories || 0) * 10) / 10,
-          'fat_100g': Math.round(parseFloat(nutrition.fat?.replace('g', '') || 0) * 10) / 10,
-          'saturated-fat_100g': Math.round(parseFloat(nutrition.saturatedFat?.replace('g', '') || 0) * 10) / 10,
-          'carbohydrates_100g': Math.round(parseFloat(nutrition.carbs?.replace('g', '') || 0) * 10) / 10,
-          'sugars_100g': Math.round(sugarValue * 10) / 10,
-          'fiber_100g': Math.round(parseFloat(nutrition.fiber?.replace('g', '') || 0) * 10) / 10,
-          'proteins_100g': Math.round(parseFloat(nutrition.protein?.replace('g', '') || 0) * 10) / 10,
-          'sodium_100g': Math.round(parseFloat(nutrition.sodium?.replace('mg', '') || 0) / 1000 * 10) / 10,
-          'energy-kcal_100g': Math.round((nutrition.calories || 0) * 10) / 10
-        },
-        
-        ingredients_text: ingredientsText
-          .split(',')
-          .map(ing => {
-            return ing.trim()
-              .toLowerCase()
-              .replace(/\b\w/g, char => char.toUpperCase());
-          })
-          .join(', '),
-        
-        additives_tags: detectedAdditives.map(add => `en:${add.replace(/\s+/g, '-')}`),
-        nova_group: novaLevel,
-        image_front_url: data.image || null,
-        source: 'spoonacular'
-      };
-
-      return formattedProduct;
-      
-    } catch (error) {
-      console.error('❌ Spoonacular fetch error:', error);
+    console.log('📡 Spoonacular response status:', response.status);
+    
+    if (!response.ok) {
+      console.log('❌ Spoonacular response not OK:', response.status);
       return null;
     }
-  }
+    
+    const data = await response.json();
+    
+    // COMPLETE DEBUG LOGGING
+    console.log('🔴 ====================================');
+    console.log('🔴 COMPLETE SPOONACULAR RAW DATA:');
+    console.log('🔴 ====================================');
+    console.log(JSON.stringify(data, null, 2));
+    console.log('🔴 ====================================');
+    
+    // Specific fields debug
+    console.log('📦 PARSED SPOONACULAR FIELDS:');
+    console.log('  Title:', data.title);
+    console.log('  Brand:', data.brand);
+    console.log('  Ingredients:', data.ingredientList);
+    console.log('  Ingredient Count:', data.ingredientCount);
+    console.log('  Image:', data.image);
+    
+    console.log('📊 NUTRITION OBJECT:');
+    console.log('  Full nutrition:', JSON.stringify(data.nutrition, null, 2));
+    console.log('  Calories:', data.nutrition?.calories);
+    console.log('  Fat:', data.nutrition?.fat);
+    console.log('  Sugar:', data.nutrition?.sugar);
+    console.log('  Carbs:', data.nutrition?.carbs);
+    console.log('  Protein:', data.nutrition?.protein);
+    console.log('  Sodium:', data.nutrition?.sodium);
+    
+    // Check if nutrients array exists
+    if (data.nutrition?.nutrients) {
+      console.log('📊 NUTRIENTS ARRAY:');
+      data.nutrition.nutrients.forEach(nutrient => {
+        if (nutrient.name.toLowerCase().includes('sugar') || 
+            nutrient.name.toLowerCase().includes('calor')) {
+          console.log(`  - ${nutrient.name}: ${nutrient.amount} ${nutrient.unit}`);
+        }
+      });
+    }
+    
+    // Check what we're converting
+    console.log('🔄 CONVERSION TO OUR FORMAT:');
+    const sugarString = data.nutrition?.sugar || '0';
+    console.log('  Sugar string:', sugarString);
+    console.log('  Parsed sugar:', parseFloat(sugarString.replace('g', '')));
+    
+    if (!data || !data.title) {
+      console.log('❌ Invalid Spoonacular data structure');
+      return null;
+    }
 
-  /**
-   * Check user allergens
-   */
+    console.log('✅ Spoonacular raw data received');
+
+    // Process ingredients to detect additives
+    const ingredientsText = data.ingredientList || '';
+    const ingredientsLower = ingredientsText.toLowerCase();
+    
+    // Enhanced additive detection
+    const detectedAdditives = [];
+    const additivePatterns = [
+      /\be\d{3}[a-z]?\b/gi,
+      /\b(lecithin|vanillin|maltodextrin|dextrose|xanthan|guar|carrageenan|citric acid|ascorbic acid|tocopherol|caramel color|annatto)\b/gi,
+      /\b(artificial|imitation|synthetic)\s+\w+/gi,
+      /\b(sodium benzoate|potassium sorbate|bha|bht|tbhq|sodium nitrite)\b/gi,
+      /\b(aspartame|sucralose|saccharin|acesulfame|stevia|sorbitol|xylitol)\b/gi,
+      /\b(msg|monosodium glutamate|disodium inosinate|disodium guanylate|autolyzed yeast)\b/gi
+    ];
+    
+    additivePatterns.forEach(pattern => {
+      const matches = ingredientsText.match(pattern);
+      if (matches) {
+        matches.forEach(match => {
+          if (!detectedAdditives.includes(match.toLowerCase())) {
+            detectedAdditives.push(match.toLowerCase());
+          }
+        });
+      }
+    });
+
+    // Determine NOVA level based on ingredients
+    let novaLevel = 1;
+    
+    if (ingredientsLower.includes('artificial') || 
+        ingredientsLower.includes('modified') ||
+        ingredientsLower.includes('hydrogenated') ||
+        detectedAdditives.length > 5) {
+      novaLevel = 4;
+    } else if (detectedAdditives.length > 2 || 
+               ingredientsLower.includes('preservative')) {
+      novaLevel = 3;
+    } else if (data.ingredientCount > 5) {
+      novaLevel = 2;
+    }
+// FIX: Force NOVA 4 for obvious ultra-processed products like sodas
+if (ingredientsLower.includes('carbonated') && ingredientsLower.includes('sugar') && 
+    (ingredientsLower.includes('caramel') || ingredientsLower.includes('phosphoric'))) {
+  novaLevel = 4;
+  console.log('🔴 OVERRIDE: Forcing NOVA 4 for soda/cola product');
+}
+
+// FIX: Detect Natural Flavoring as harmful
+if (ingredientsLower.includes('natural flavour') || ingredientsLower.includes('natural flavor')) {
+  if (!detectedAdditives.includes('natural flavoring')) {
+    detectedAdditives.push('natural flavoring');
+    console.log('⚠️ Added Natural Flavoring to harmful additives');
+  }
+}
+    // Get nutrition data if available
+    const nutrition = data.nutrition || {};
+    const nutrients = nutrition.nutrients || [];
+    
+    // Parse sugar value - CHECK MULTIPLE POSSIBLE FORMATS
+    let sugarValue = 0;
+    if (nutrition.sugar) {
+      sugarValue = parseFloat(nutrition.sugar.replace(/[^0-9.]/g, ''));
+      console.log('🍬 Sugar from nutrition.sugar:', sugarValue);
+    } else if (nutrients.length > 0) {
+      const sugarNutrient = nutrients.find(n => 
+        n.name.toLowerCase().includes('sugar') && 
+        !n.name.toLowerCase().includes('added')
+      );
+      if (sugarNutrient) {
+        sugarValue = sugarNutrient.amount || 0;
+        console.log('🍬 Sugar from nutrients array:', sugarValue);
+      }
+    }
+    
+    // Format the product data properly
+    const formattedProduct = {
+      product_name: data.title,
+      brands: data.brand || 'Unknown Brand',
+      
+      nutriments: {
+        'calories': Math.round((nutrition.calories || 0) * 10) / 10,
+        'fat_100g': Math.round(parseFloat(nutrition.fat?.replace('g', '') || 0) * 10) / 10,
+        'saturated-fat_100g': Math.round(parseFloat(nutrition.saturatedFat?.replace('g', '') || 0) * 10) / 10,
+        'carbohydrates_100g': Math.round(parseFloat(nutrition.carbs?.replace('g', '') || 0) * 10) / 10,
+        'sugars_100g': Math.round(sugarValue * 10) / 10,
+        'fiber_100g': Math.round(parseFloat(nutrition.fiber?.replace('g', '') || 0) * 10) / 10,
+        'proteins_100g': Math.round(parseFloat(nutrition.protein?.replace('g', '') || 0) * 10) / 10,
+        'sodium_100g': Math.round(parseFloat(nutrition.sodium?.replace('mg', '') || 0) / 1000 * 10) / 10,
+        'energy-kcal_100g': Math.round((nutrition.calories || 0) * 10) / 10
+      },
+      
+      ingredients_text: ingredientsText
+        .split(',')
+        .map(ing => {
+          return ing.trim()
+            .toLowerCase()
+            .replace(/\b\w/g, char => char.toUpperCase());
+        })
+        .join(', '),
+      
+      additives_tags: detectedAdditives.map(add => `en:${add.replace(/\s+/g, '-')}`),
+      nova_group: novaLevel,
+      image_front_url: data.image || null,
+      source: 'spoonacular'
+    };
+
+    console.log('📦 FORMATTED product:', JSON.stringify(formattedProduct, null, 2));
+    console.log('🧪 Detected additives:', detectedAdditives);
+    console.log('🏷️ NOVA level:', novaLevel);
+    console.log('🍬 FINAL SUGAR VALUE:', formattedProduct.nutriments.sugars_100g);
+    
+    return formattedProduct;
+    
+  } catch (error) {
+    console.error('❌ Spoonacular fetch error:', error);
+    return null;
+  }
+}
+  // YOUR EXISTING checkUserAllergens FUNCTION - UNCHANGED
   static checkUserAllergens(product, userFilters) {
     const warnings = [];
     const ingredients = (product.ingredients_text || '').toLowerCase();
     
+    // Map user filters to allergen keywords
     const allergenMap = {
       'gluten-free': {
         keywords: ['wheat', 'barley', 'rye', 'gluten', 'flour', 'bread'],
@@ -782,13 +825,13 @@ class ProductService {
         keywords: ['high fructose corn syrup', 'corn syrup', 'dextrose', 'maltose', 'sucrose'],
         warning: 'High Sugar Content',
         checkNutrients: true,
-        nutrientThreshold: 10
+        nutrientThreshold: 10 // grams per 100g
       },
       'low-sodium': {
         keywords: ['salt', 'sodium'],
         warning: 'High Sodium Content',
         checkNutrients: true,
-        nutrientThreshold: 400
+        nutrientThreshold: 400 // mg per 100g
       },
       'no-msg': {
         keywords: ['msg', 'monosodium glutamate', 'e621', 'glutamate', 'yeast extract'],
@@ -796,15 +839,18 @@ class ProductService {
       }
     };
 
+    // Check each active filter
     userFilters.forEach(filter => {
       const filterData = allergenMap[filter];
       if (!filterData) return;
 
+      // Check ingredients text
       let found = false;
       if (filterData.keywords) {
         found = filterData.keywords.some(keyword => ingredients.includes(keyword));
       }
 
+      // Check nutrient levels for sugar/sodium filters
       if (filterData.checkNutrients && product.nutriments) {
         if (filter === 'low-sugar' && product.nutriments['sugars_100g'] > filterData.nutrientThreshold) {
           found = true;
@@ -814,6 +860,7 @@ class ProductService {
         }
       }
 
+      // Add warning if allergen/restriction is violated
       if (found) {
         warnings.push({
           title: `⚠️ ${filterData.warning}`,
@@ -826,8 +873,10 @@ class ProductService {
     return warnings;
   }
 
+  // ALL YOUR OTHER EXISTING FUNCTIONS BELOW - COMPLETELY UNCHANGED
+  
   /**
-   * Determine if product is liquid
+   * Determine if product is liquid based on categories
    */
   static isProductLiquid(product) {
     const liquidCategories = [
@@ -839,12 +888,14 @@ class ProductService {
     const categories = (product.categories || '').toLowerCase();
     const productName = (product.product_name || '').toLowerCase();
     
+    // Check categories
     for (const liquidCat of liquidCategories) {
       if (categories.includes(liquidCat)) {
         return true;
       }
     }
     
+    // Check product name for liquid indicators
     const liquidIndicators = ['drink', 'juice', 'water', 'milk', 'cola', 'soda', 'beverage', 'yogurt', 'yoghurt'];
     for (const indicator of liquidIndicators) {
       if (productName.includes(indicator)) {
@@ -856,19 +907,23 @@ class ProductService {
   }
 
   /**
-   * Determine NOVA processing level
+   * Determine NOVA processing level (1-4)
    */
   static getNOVALevel(product) {
+    // If NOVA group is provided by Open Food Facts
     if (product.nova_group) {
       return parseInt(product.nova_group);
     }
     
+    // Otherwise, estimate based on ingredients
     const ingredients = (product.ingredients_text || '').toLowerCase();
     const ingredientsList = product.ingredients || [];
     const ingredientCount = ingredientsList.length || 0;
     
+    // Check for additives (E-numbers)
     const hasENumbers = /\bE\d{3}\b/i.test(ingredients);
     
+    // Ultra-processed indicators
     const ultraProcessedMarkers = [
       'artificial flavor', 'natural flavor', 'modified starch', 'high fructose corn syrup',
       'corn syrup', 'hydrogenated', 'partially hydrogenated', 'maltodextrin',
@@ -884,35 +939,39 @@ class ProductService {
       }
     }
     
+    // Determine NOVA level based on ingredients
     if (ingredientCount > 5 && (hasUltraProcessedMarkers || hasENumbers)) {
-      return 4;
+      return 4; // Ultra-processed
     } else if (ingredientCount >= 3 && ingredientCount <= 5) {
-      return 3;
+      return 3; // Processed
     } else if (ingredientCount === 2) {
-      return 2;
+      return 2; // Processed culinary ingredients
     } else {
-      return 1;
+      return 1; // Unprocessed or minimally processed
     }
   }
 
   /**
-   * Check harmful additives
+   * ENHANCED HARMFUL ADDITIVES DETECTION - Case insensitive with comprehensive matching
    */
   static checkHarmfulAdditives(product) {
+    // Get ingredients and convert to lowercase for checking
     const ingredientsOriginal = product.ingredients_text || '';
     const ingredients = ingredientsOriginal.toLowerCase().replace(/[,;]/g, ' ');
     
+    // Also check product name for sneaky additions
     const productName = (product.product_name || '').toLowerCase();
     const fullText = `${ingredients} ${productName}`;
     
     let totalPenalty = 0;
     const warnings = [];
-    const foundIngredients = new Set();
+    const foundIngredients = new Set(); // Prevent duplicates
     
     console.log('🔍 Checking ingredients for harmful additives...');
     console.log('📝 Original ingredients:', ingredientsOriginal);
     console.log('📝 Normalized for checking:', ingredients);
     
+    // Check Comprehensive Harmful Ingredients Database
     for (const category in HARMFUL_INGREDIENTS_DATABASE) {
       const items = HARMFUL_INGREDIENTS_DATABASE[category];
       
@@ -920,17 +979,21 @@ class ProductService {
         const item = items[key];
         const itemKey = `${category}-${key}`;
         
+        // Skip if already found
         if (foundIngredients.has(itemKey)) continue;
         
+        // Create array of terms to check (main key + all aliases)
         const termsToCheck = [key];
         if (item.aliases && item.aliases.length > 0) {
           termsToCheck.push(...item.aliases);
         }
         
+        // Check each term
         let found = false;
         let matchedTerm = '';
         
         for (const term of termsToCheck) {
+          // Use different matching strategies
           if (this.checkIngredientMatch(ingredients, term)) {
             found = true;
             matchedTerm = term;
@@ -938,6 +1001,7 @@ class ProductService {
           }
         }
         
+        // If found, add to warnings
         if (found) {
           foundIngredients.add(itemKey);
           totalPenalty += item.penalty;
@@ -954,6 +1018,7 @@ class ProductService {
       }
     }
     
+    // Check for E-numbers pattern
     const eNumberPattern = /\b[eE]\s*\d{3}[a-zA-Z]?\b/g;
     const eNumbers = ingredients.match(eNumberPattern) || [];
     
@@ -964,6 +1029,7 @@ class ProductService {
       if (eInfo && eInfo.severity === 'high' && !foundIngredients.has(`e-${normalized}`)) {
         foundIngredients.add(`e-${normalized}`);
         
+        // Assign penalty based on severity
         const ePenalty = eInfo.severity === 'high' ? 8 : 
                          eInfo.severity === 'medium' ? 5 : 2;
         totalPenalty += ePenalty;
@@ -979,6 +1045,8 @@ class ProductService {
       }
     }
     
+    // Special checks for commonly missed items
+    // Check for various forms of corn syrup
     const cornSyrupVariations = [
       'corn syrup', 'corn-syrup', 'corn syrup solids', 'glucose syrup',
       'glucose-fructose', 'glucose fructose', 'maize syrup'
@@ -988,6 +1056,7 @@ class ProductService {
       if (ingredients.includes(variant) && !foundIngredients.has('corn-syrup-special')) {
         foundIngredients.add('corn-syrup-special');
         
+        // Only add if not already caught by main database
         const alreadyHasCornSyrup = warnings.some(w => 
           w.title.toLowerCase().includes('corn syrup') || 
           w.title.toLowerCase().includes('hfcs')
@@ -1006,6 +1075,7 @@ class ProductService {
       }
     }
     
+    // Check for phosphates (often missed)
     const phosphateVariations = [
       'phosphate', 'phosphoric acid', 'trisodium phosphate', 'sodium phosphate',
       'disodium phosphate', 'monocalcium phosphate', 'calcium phosphate'
@@ -1015,6 +1085,7 @@ class ProductService {
       if (ingredients.includes(phosphate) && !foundIngredients.has(`phosphate-${phosphate}`)) {
         foundIngredients.add(`phosphate-${phosphate}`);
         
+        // Check if already added
         const alreadyHasPhosphate = warnings.some(w => 
           w.title.toLowerCase().includes('phosphate')
         );
@@ -1032,6 +1103,7 @@ class ProductService {
       }
     }
     
+    // Sort warnings by severity
     warnings.sort((a, b) => {
       const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
       return (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4);
@@ -1047,24 +1119,29 @@ class ProductService {
   }
 
   /**
-   * Smart ingredient matching
+   * HELPER FUNCTION: Smart ingredient matching
+   * Handles various formats and partial matches
    */
   static checkIngredientMatch(ingredients, searchTerm) {
+    // Normalize search term
     const term = searchTerm.toLowerCase().trim();
     
+    // Direct match
     if (ingredients.includes(term)) {
       return true;
     }
     
+    // Check with word boundaries for exact word match
     const wordBoundaryPattern = new RegExp(`\\b${this.escapeRegex(term)}\\b`, 'i');
     if (wordBoundaryPattern.test(ingredients)) {
       return true;
     }
     
+    // Check with spaces, hyphens, and parentheses
     const variations = [
-      term.replace(/ /g, '-'),
-      term.replace(/-/g, ' '),
-      term.replace(/ /g, ''),
+      term.replace(/ /g, '-'),  // space to hyphen
+      term.replace(/-/g, ' '),  // hyphen to space
+      term.replace(/ /g, ''),   // remove spaces
     ];
     
     for (const variant of variations) {
@@ -1073,6 +1150,7 @@ class ProductService {
       }
     }
     
+    // Check if it appears with common prefixes/suffixes
     const modifiedVersions = [
       `modified ${term}`,
       `${term} extract`,
@@ -1093,14 +1171,14 @@ class ProductService {
   }
 
   /**
-   * Escape regex characters
+   * HELPER: Escape special regex characters
    */
   static escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
 
   /**
-   * Get severity level
+   * HELPER: Convert penalty points to severity level
    */
   static getSeverityLevel(penalty) {
     if (penalty >= 15) return 'critical';
@@ -1111,17 +1189,22 @@ class ProductService {
   }
 
   /**
-   * Main scoring algorithm
+   * Main scoring algorithm - Evidence-based nutritional assessment
+   * ENHANCED VERSION: Harsh penalties + Generous bonuses for whole foods
    */
   static calculateHealthScore(product) {
+    // Start with perfect score
     let score = 100;
     const warnings = [];
     
+    // Get nutritional values per 100g/100ml
     const nutriments = product.nutriments || {};
     
+    // Determine if liquid or solid
     const isLiquid = this.isProductLiquid(product);
     const unit = isLiquid ? '100ml' : '100g';
     
+    // Extract nutritional values
     const sugar = nutriments['sugars_100g'] || 0;
     const saturatedFat = nutriments['saturated-fat_100g'] || 0;
     const sodium = nutriments['sodium_100g'] || 0;
@@ -1129,20 +1212,25 @@ class ProductService {
     const proteins = nutriments['proteins_100g'] || 0;
     const energy = nutriments['energy-kcal_100g'] || 0;
     
-    let isSafetyOverride = false;
-    if (sugar > 30 || saturatedFat > 10) {
-      console.log('⚠️ SAFETY OVERRIDE: Extreme sugar or fat detected');
-      console.log(`Sugar: ${sugar}g, Saturated Fat: ${saturatedFat}g`);
-      isSafetyOverride = true;
-    }
+  // CRITICAL SAFETY CHECK - Flag extreme products
+let isSafetyOverride = false;
+if (sugar > 30 || saturatedFat > 10) {
+  console.log('⚠️ SAFETY OVERRIDE: Extreme sugar or fat detected');
+  console.log(`Sugar: ${sugar}g, Saturated Fat: ${saturatedFat}g`);
+  isSafetyOverride = true;
+}
 
+    // Get ingredients info
     const ingredients = (product.ingredients_text || '').toLowerCase();
     const ingredientsList = product.ingredients || [];
     
+    // SPECIAL HANDLING FOR LOW-CALORIE CONDIMENTS
     const isLowCalorieProduct = energy < 10;
     if (isLowCalorieProduct && ingredientsList.length < 10 && sodium < 500) {
+      // Simple condiment - start with good base score
       score = 85;
       
+      // Only apply sodium penalty if actually high
       if (sodium > 1000) {
         score -= 20;
         warnings.push({
@@ -1152,14 +1240,17 @@ class ProductService {
         });
       }
       
+      // Bonus for organic
       if (ingredients.includes('organic')) {
         score += 10;
       }
       
+      // Still check for harmful additives
       const additiveCheck = this.checkHarmfulAdditives(product);
       score -= additiveCheck.penalty;
       warnings.push(...additiveCheck.warnings);
       
+      // Calculate final grade and return early for condiments
       score = Math.max(0, Math.min(100, score));
       
       let grade, status;
@@ -1209,6 +1300,9 @@ class ProductService {
       };
     }
     
+    // REGULAR SCORING FOR NON-CONDIMENT PRODUCTS
+    
+    // 1. USE NUTRI-SCORE AS BASE IF AVAILABLE
     if (product.nutriscore_grade) {
       const nutriScoreMap = {
         'a': 100, 'b': 85, 'c': 70, 'd': 55, 'e': 40
@@ -1219,6 +1313,7 @@ class ProductService {
       }
     }
     
+    // 2. NOVA PROCESSING LEVEL PENALTY (KEEP HARSH)
     const novaLevel = this.getNOVALevel(product);
     if (novaLevel === 4) {
       score -= 20;
@@ -1238,7 +1333,9 @@ class ProductService {
       score -= 5;
     }
     
+    // 3. SUGAR PENALTIES (KEEP HARSH - Different thresholds for liquids vs solids)
     if (isLiquid) {
+      // Liquid sugar thresholds (per 100ml)
       if (sugar > 10) {
         score -= 35;
         warnings.push({
@@ -1269,6 +1366,7 @@ class ProductService {
         });
       }
     } else {
+      // Solid sugar thresholds (per 100g)
       if (sugar > 22.5) {
         score -= 40;
         warnings.push({
@@ -1300,7 +1398,9 @@ class ProductService {
       }
     }
     
+    // 4. SODIUM PENALTIES (KEEP HARSH)
     if (isLiquid) {
+      // Liquid sodium (per 100ml)
       if (sodium > 200) {
         score -= 20;
         warnings.push({
@@ -1324,6 +1424,7 @@ class ProductService {
         });
       }
     } else {
+      // Solid sodium (per 100g)
       if (sodium > 1000) {
         score -= 35;
         warnings.push({
@@ -1355,6 +1456,7 @@ class ProductService {
       }
     }
     
+    // 5. SATURATED FAT PENALTIES (KEEP HARSH - for solids)
     if (!isLiquid && saturatedFat > 0) {
       if (saturatedFat > 10) {
         score -= 35;
@@ -1387,40 +1489,55 @@ class ProductService {
       }
     }
     
+    // 6. CHECK FOR HARMFUL ADDITIVES (ENHANCED)
     const additiveCheck = this.checkHarmfulAdditives(product);
     score -= additiveCheck.penalty;
     warnings.push(...additiveCheck.warnings);
     
+// REPLACE THE ENTIRE POSITIVE MODIFIERS SECTION
+// Find: "// 7. POSITIVE MODIFIERS" or "// 7. ENHANCED POSITIVE MODIFIERS"
+// Replace with this EXACT implementation from Framework v2.1:
+
+    // ===========================================================
+    // 7. POSITIVE MODIFIERS (max +20 total per Framework v2.1)
+    // ===========================================================
     let bonusPoints = 0;
     
+    // High fiber bonus (max 8 points per framework)
     if (fiber > 6) {
       bonusPoints += 8;
     } else if (fiber > 3) {
       bonusPoints += 4;
     }
     
+    // High protein bonus (max 7 points per framework)
     if (proteins > 10) {
       bonusPoints += 7;
     } else if (proteins > 5) {
       bonusPoints += 3;
     }
     
+    // Check for whole grains in ingredients (+5 per framework)
     if (ingredients.includes('whole grain') || ingredients.includes('whole wheat')) {
       bonusPoints += 5;
     }
     
+    // Organic bonus (+3 per framework)
     if (ingredients.includes('organic')) {
       bonusPoints += 3;
     }
     
+    // CRITICAL: Cap bonus at 20 as per Framework v2.1
     bonusPoints = Math.min(bonusPoints, 20);
     
     console.log(`📊 Bonuses applied: ${bonusPoints} (capped at 20)`);
     
     score += bonusPoints;
     
+    // Ensure score stays within 0-100 range
     score = Math.max(0, Math.min(100, score));
     
+    // Calculate letter grade based on final score
     let grade, status;
     if (score >= 90) {
       grade = 'A';
@@ -1460,9 +1577,11 @@ class ProductService {
       status = 'Avoid - Serious Health Concerns';
     }
     
+    // Apply safety cap for extreme products
     if (isSafetyOverride && score > 30) {
       console.log(`SAFETY CAP APPLIED: Score ${score} reduced to 30 due to extreme sugar/fat`);
       score = 30;
+      // Force recalculate grade for capped score
       if (score >= 45) {
         grade = 'D+';
         status = 'Avoid - Unhealthy';
@@ -1480,11 +1599,13 @@ class ProductService {
 
     console.log(`✅ Final grade: ${grade} Score: ${score}`);
 
+    // Return score object in format expected by App.js
     return {
       score: Math.round(score),
       grade: grade,
       status: status,
       warnings: warnings.sort((a, b) => {
+        // Sort warnings by severity
         const severityOrder = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
         return (severityOrder[a.severity] || 4) - (severityOrder[b.severity] || 4);
       })

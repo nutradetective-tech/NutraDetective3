@@ -17,6 +17,9 @@ import {
   Platform,
   TextInput,
 } from 'react-native';
+import PremiumService from './services/PremiumService';
+import UpgradeModal from './components/modals/UpgradeModal.js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './styles/AppStyles';
 import HomeScreen from './screens/HomeScreen';  // ✅ Keep this - needed
 import ResultsScreen from './screens/ResultsScreen';
@@ -27,7 +30,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import SimpleScanner from './components/SimpleScanner';
 import ProductService from './services/ProductService';
 import EnhancedManualScanner from './components/EnhancedManualScanner';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import CameraScanner from './components/CameraScanner';
 import ScannerSelector from './components/ScannerSelector';
 import UserSettingsService from './services/UserSettingsService';
@@ -69,6 +71,12 @@ export default function App() {
   const [tempGoal, setTempGoal] = useState(5);
   const [tempStats, setTempStats] = useState(['totalScans', 'healthyPercent', 'streak']);
   
+  // Premium state
+  const [isPremium, setIsPremium] = useState(false);
+  const [todayScans, setTodayScans] = useState(0);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [upgradeReason, setUpgradeReason] = useState('general');
+  
   // Animation values
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -102,12 +110,20 @@ export default function App() {
 
   // Load user settings
   const loadUserSettings = async () => {
-    const settings = await UserSettingsService.getSettings();
-    setUserSettings(settings);
-    setTempName(settings.userName);
-    setTempGoal(settings.scanGoal);
-    setTempStats(settings.dashboardStats);
-  };
+  const settings = await UserSettingsService.getSettings();
+  setUserSettings(settings);
+  setTempName(settings.userName);
+  setTempGoal(settings.scanGoal);
+  setTempStats(settings.dashboardStats);
+  
+  // Load premium status
+  const premiumStatus = await PremiumService.isPremium();
+  setIsPremium(premiumStatus);
+  
+  // Load today's scan count
+  const scans = await PremiumService.getTodayScans();
+  setTodayScans(scans);
+};
 
   // Pulse animation for scan button
   const startPulseAnimation = () => {
@@ -138,52 +154,82 @@ export default function App() {
 
   // Load scan history from storage
   const loadHistory = async () => {
-    try {
-      const historyData = await AsyncStorage.getItem('scanHistory');
-      if (historyData) {
-        const history = JSON.parse(historyData);
-        setScanHistory(history);
-      }
-    } catch (error) {
-      console.log('Error loading history:', error);
+  try {
+    const historyData = await AsyncStorage.getItem('scanHistory');
+    if (historyData) {
+      const allHistory = JSON.parse(historyData);
+      // Filter history based on premium status (30 days for free, unlimited for premium)
+      const filteredHistory = await PremiumService.filterHistory(allHistory);
+      setScanHistory(filteredHistory);
     }
-  };
+  } catch (error) {
+    console.log('Error loading history:', error);
+  }
+};
 
   // Save scan to history
-  const saveToHistory = async (product) => {
-    try {
-      const scanRecord = {
-        id: Date.now().toString(),
-        name: product.name,
-        brand: product.brand,
-        grade: product.healthScore?.grade || '?',
-        score: product.healthScore?.score || 0,
-        date: new Date().toISOString(),
-        barcode: product.barcode || '',
-      };
+const saveToHistory = async (product) => {
+  try {
+    const scanRecord = {
+      id: Date.now().toString(),
+      name: product.name,
+      brand: product.brand,
+      grade: product.healthScore?.grade || '?',
+      score: product.healthScore?.score || 0,
+      date: new Date().toISOString(),
+      barcode: product.barcode || '',
+      // 🔥 NEW: Cache complete product data
+      fullProduct: {
+        ...product,
+        cachedAt: new Date().toISOString(),
+        apiSource: product.source || 'Open Food Facts'
+      }
+    };
 
-      const updatedHistory = [scanRecord, ...scanHistory].slice(0, 50);
-      setScanHistory(updatedHistory);
-      
-      await AsyncStorage.setItem('scanHistory', JSON.stringify(updatedHistory));
-    } catch (error) {
-      console.log('Error saving to history:', error);
-    }
-  };
+    const updatedHistory = [scanRecord, ...scanHistory].slice(0, 50);
+    setScanHistory(updatedHistory);
+    
+    await AsyncStorage.setItem('scanHistory', JSON.stringify(updatedHistory));
+  } catch (error) {
+    console.log('Error saving to history:', error);
+  }
+};
 
-  const handleBarcodeScan = (result) => {
+  const handleBarcodeScan = async (result) => {
   const barcode = result.data || result;
+  
+  // Check if user can scan (premium limits)
+  const scanCheck = await PremiumService.canScan();
+  
+  if (!scanCheck.canScan) {
+    // Close scanner modal
+    setIsScanning(false);
+    setScanMethod(null);
+    setShowCameraScanner(false);
+    
+    // Show upgrade modal
+    setUpgradeReason('scans');
+    setShowUpgradeModal(true);
+    return;
+  }
   
   // Close modal immediately
   setIsScanning(false);
   setScanMethod(null);
   setShowCameraScanner(false);
   console.log('Starting product fetch');
+  
   // Process after modal closes
   setTimeout(async () => {
     setIsLoading(true);
     
     try {
+      // Increment scan counter for free users
+      if (!isPremium) {
+        const newCount = await PremiumService.incrementScanCounter();
+        setTodayScans(newCount);
+      }
+      
       const product = await ProductService.fetchProductByBarcode(barcode);
       
       if (product) {
@@ -222,30 +268,43 @@ export default function App() {
     }
   }, 100);
 };
+  
+ 
 
   const handleHistoryItemPress = async (item) => {
-  setActiveTab('home');
-  setIsLoading(true);
-  
-  // Process after delay to show loading screen
-  setTimeout(async () => {
-    try {
-      const product = await ProductService.fetchProductByBarcode(item.barcode);
-      
-      if (product) {
-        product.barcode = item.barcode;
-        setCurrentProduct(product);
-        setShowResult(true);
-        // NOT calling saveToHistory - it's already in history!
-      } else {
-        Alert.alert('Error', 'Could not load product details');
+  // Check if we have cached product data
+  if (item.fullProduct) {
+    // Use cached data - NO API CALL! 🎉
+    console.log('✅ Using cached product data - no API call needed');
+    setCurrentProduct(item.fullProduct);
+    setShowResult(true);
+    setActiveTab('home');
+  } else {
+    // Legacy history items without fullProduct - need to re-fetch
+    console.log('⚠️ Old history item, re-fetching from API...');
+    setActiveTab('home');
+    setIsLoading(true);
+    
+    setTimeout(async () => {
+      try {
+        const product = await ProductService.fetchProductByBarcode(item.barcode);
+        
+        if (product) {
+          product.barcode = item.barcode;
+          setCurrentProduct(product);
+          setShowResult(true);
+          // Update history with full product data for next time
+          await saveToHistory(product);
+        } else {
+          Alert.alert('Error', 'Could not load product details');
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to fetch product data');
+      } finally {
+        setIsLoading(false);
       }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to fetch product data');
-    } finally {
-      setIsLoading(false);
-    }
-  }, 100);
+    }, 100);
+  }
 };
 
   const clearHistory = () => {
@@ -296,7 +355,11 @@ export default function App() {
       >
         <View style={styles.loadingContent}>
           <View style={styles.loadingIconContainer}>
-            <Text style={styles.loadingIcon}>🔍</Text>
+            <Image 
+  source={require('./assets/images/logo.png')}
+  style={{ width: 50, height: 50, tintColor: '#FFFFFF' }}
+  resizeMode="contain"
+/>
           </View>
           <ActivityIndicator size="large" color="#FFFFFF" style={{ marginTop: 20 }} />
           <Text style={styles.loadingTextWhite}>Analyzing product...</Text>
@@ -379,7 +442,21 @@ export default function App() {
         fadeAnim={fadeAnim}
         styles={styles}
       />
+      
+      {/* Upgrade Modal */}
+      <UpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+        onUpgrade={() => {
+          setShowUpgradeModal(false);
+          Alert.alert(
+            'Coming Soon!',
+            'Payment integration coming soon. For now, go to Profile to toggle premium for testing.',
+            [{ text: 'OK' }]
+          );
+        }}
+        reason={upgradeReason}
+      />
     </SafeAreaView>
   );
 }  // This closes the App function
-

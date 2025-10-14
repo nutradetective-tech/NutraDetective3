@@ -7,12 +7,14 @@ import {
   StatusBar,
   ScrollView,
   StyleSheet,
+   Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import NameEditModal from '../components/modals/NameEditModal';
 import GoalEditModal from '../components/modals/GoalEditModal';
 import StatsSelectorModal from '../components/modals/StatsSelectorModal';
 import UserSettingsService from '../services/UserSettingsService';
+import PremiumService from '../services/PremiumService';
 import { calculateStreak } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
 
@@ -93,6 +95,51 @@ const ProfileScreen = ({
           {/* Settings Section */}
           <View style={styles.settingsSection}>
             <Text style={styles.sectionTitle}>Personalization</Text>
+
+            {/* 🔥 PREMIUM TOGGLE - FOR TESTING ONLY */}
+            <TouchableOpacity
+              style={[styles.settingItem, { 
+                backgroundColor: '#FEF2F2', 
+                borderWidth: 2, 
+                borderColor: '#8B5CF6',
+                marginBottom: 12
+              }]}
+              onPress={async () => {
+                try {
+                  const currentStatus = await PremiumService.isPremium();
+                  
+                  if (currentStatus) {
+                    await PremiumService.deactivateTestPremium();
+                    Alert.alert(
+                      '✅ Premium Deactivated', 
+                      'You are now on the free Seeker tier (7 scans/day).',
+                      [{ text: 'OK' }]
+                    );
+                  } else {
+                    await PremiumService.activateTestPremium();
+                    Alert.alert(
+                      '🎉 Guardian Activated!', 
+                      'You now have Guardian tier for 30 days!\n\n✅ Unlimited scans\n✅ Unlimited history\n✅ No ads (coming soon)',
+                      [{ text: 'Awesome!' }]
+                    );
+                  }
+                } catch (error) {
+                  console.error('Premium toggle error:', error);
+                  Alert.alert('Error', 'Could not toggle premium status. Check console.');
+                }
+              }}
+            >
+              <View style={styles.settingLeft}>
+                <Text style={styles.settingIcon}>👑</Text>
+                <Text style={styles.settingLabel}>Premium Status (TEST)</Text>
+              </View>
+              <View style={styles.settingRight}>
+                <Text style={[styles.settingValue, { color: '#8B5CF6', fontWeight: '600' }]}>
+                  Tap to unlock
+                </Text>
+                <Text style={styles.settingArrow}>→</Text>
+              </View>
+            </TouchableOpacity>
             
             <TouchableOpacity 
               style={styles.settingItem}

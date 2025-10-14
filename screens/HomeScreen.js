@@ -9,6 +9,7 @@ import {
   Modal,
   SafeAreaView,
   StatusBar,
+  Image,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import CameraScanner from '../components/CameraScanner';
@@ -60,7 +61,11 @@ const HomeScreen = ({
                     colors={['#667EEA', '#764BA2']}
                     style={styles.logoIconContainer}
                   >
-                    <Text style={styles.logoIcon}>🔍</Text>
+                    <Image 
+                      source={require('../assets/images/logo.png')}
+                      style={{ width: 48, height: 48, tintColor: '#FFFFFF' }}
+                      resizeMode="contain"
+                    />
                   </LinearGradient>
                   <Text style={styles.logoText}>
                     <Text style={styles.logoNutra}>Nutra</Text>

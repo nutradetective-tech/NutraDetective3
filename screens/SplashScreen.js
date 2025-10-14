@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, StyleSheet, Image } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 const SplashScreen = ({ splashFadeAnim }) => {
@@ -11,7 +11,11 @@ const SplashScreen = ({ splashFadeAnim }) => {
       <Animated.View style={[styles.splashContent, { opacity: splashFadeAnim }]}>
         <View style={styles.splashLogoContainer}>
           <View style={styles.splashIconWrapper}>
-            <Text style={styles.splashIcon}>🔍</Text>
+            <Image 
+              source={require('../assets/images/logo.png')}
+              style={{ width: 150, height: 150 }}
+              resizeMode="contain"
+            />
           </View>
         </View>
         <Text style={styles.splashTitle}>NutraDetective</Text>

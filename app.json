@@ -17,7 +17,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.nutradetective.app",
-      "buildNumber": "1"
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "NSCameraUsageDescription": "NutraDetective needs camera access to scan product barcodes.",
+        "NSPhotoLibraryUsageDescription": "NutraDetective needs access to your photo library to analyze product images.",
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,14 +32,24 @@
       "package": "com.nutradetective.app",
       "versionCode": 1,
       "permissions": [
-        "CAMERA"
+        "CAMERA",
+        "INTERNET",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-camera"
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow NutraDetective to access your camera to scan barcodes."
+        }
+      ]
     ],
     "extra": {
       "eas": {
