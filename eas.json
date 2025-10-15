@@ -15,10 +15,17 @@
       }
     },
     "production": {
+      "distribution": "store",
       "autoIncrement": true
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6754045291",
+        "appleId": "contact@nutradetective.com",
+        "appleTeamId": "R7XL6H6P23"
+      }
+    }
   }
 }

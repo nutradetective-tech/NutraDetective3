@@ -49,7 +49,9 @@
         {
           "cameraPermission": "Allow NutraDetective to access your camera to scan barcodes."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-asset"
     ],
     "extra": {
       "eas": {
