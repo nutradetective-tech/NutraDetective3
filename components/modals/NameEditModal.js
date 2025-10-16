@@ -6,51 +6,72 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import UserSettingsService from '../../services/UserSettingsService';
 
-const NameEditModal = ({ visible, tempName, setTempName, onClose, onSave }) => (
-  <Modal 
-    visible={visible} 
-    transparent 
-    animationType="slide"
-    onRequestClose={onClose}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <Text style={styles.modalTitle}>Edit Display Name</Text>
-        <TextInput
-          style={styles.modalInput}
-          value={tempName}
-          onChangeText={setTempName}
-          placeholder="Enter your name"
-          maxLength={20}
-          autoFocus
-        />
-        <View style={styles.modalButtons}>
-          <TouchableOpacity 
-            style={styles.modalCancelButton}
-            onPress={onClose}
-          >
-            <Text style={styles.modalCancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.modalSaveButton}
-            onPress={onSave}
-          >
-            <LinearGradient
-              colors={['#667EEA', '#764BA2']}
-              style={styles.modalGradientButton}
+const NameEditModal = ({ visible, tempName, setTempName, onClose, onSave }) => {
+  // iOS Fix: Prevent crash on empty string
+  const handleSave = () => {
+    if (tempName && tempName.trim().length > 0) {
+      onSave();
+    } else {
+      // Don't save empty names, just close
+      onClose();
+    }
+  };
+
+  return (
+    <Modal 
+      visible={visible} 
+      transparent 
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Edit Display Name</Text>
+          <TextInput
+            key="name-input" // iOS Fix: Prevents jumping
+            style={styles.modalInput}
+            value={tempName}
+            onChangeText={setTempName}
+            placeholder="Enter your name"
+            placeholderTextColor="#94A3B8"
+            maxLength={20}
+            autoFocus={Platform.OS !== 'ios'} // iOS Fix: AutoFocus causes issues in modals
+            autoCapitalize="words"
+            autoCorrect={false}
+            returnKeyType="done"
+            onSubmitEditing={handleSave}
+            // iOS-specific optimizations
+            enablesReturnKeyAutomatically={true}
+            clearButtonMode="while-editing"
+          />
+          <View style={styles.modalButtons}>
+            <TouchableOpacity 
+              style={styles.modalCancelButton}
+              onPress={onClose}
             >
-              <Text style={styles.modalSaveText}>Save</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.modalSaveButton}
+              onPress={handleSave}
+            >
+              <LinearGradient
+                colors={['#667EEA', '#764BA2']}
+                style={styles.modalGradientButton}
+              >
+                <Text style={styles.modalSaveText}>Save</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   modalOverlay: {
@@ -87,6 +108,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 20,
     backgroundColor: '#F7F8FA',
+    color: '#1A202C',
   },
   modalButtons: {
     flexDirection: 'row',
