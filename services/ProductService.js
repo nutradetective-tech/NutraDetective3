@@ -734,64 +734,90 @@ class ProductService {
   }
 
   /**
-   * Check user allergens
+
+   * Check user allergens - FIXED VERSION
    */
   static checkUserAllergens(product, userFilters) {
     const warnings = [];
     const ingredients = (product.ingredients_text || '').toLowerCase();
-    
+    const labels = (product.labels || '').toLowerCase();
+
     const allergenMap = {
       'gluten-free': {
-        keywords: ['wheat', 'barley', 'rye', 'gluten', 'flour', 'bread'],
+        keywords: ['wheat flour', 'barley', 'rye', 'malt', 'wheat bread', 'semolina', 'spelt', 'kamut', 'triticale'],
+        excludeKeywords: ['gluten-free', 'gluten free', 'cassava flour', 'coconut flour', 'almond flour', 'rice flour', 'corn flour', 'tapioca flour', 'chickpea flour', 'oat flour'],
+        checkLabels: ['no-gluten', 'gluten-free', 'certified-gluten-free'],
         warning: 'Contains Gluten'
       },
       'dairy-free': {
         keywords: ['milk', 'cheese', 'butter', 'yogurt', 'cream', 'whey', 'casein', 'lactose'],
+        excludeKeywords: ['coconut milk', 'almond milk', 'oat milk', 'soy milk', 'rice milk', 'cashew milk'],
+        checkLabels: ['dairy-free', 'vegan'],
         warning: 'Contains Dairy'
       },
       'tree-nuts': {
         keywords: ['almond', 'cashew', 'walnut', 'pecan', 'pistachio', 'hazelnut', 'macadamia', 'brazil nut'],
+        excludeKeywords: ['coconut'],
+        checkLabels: ['tree-nut-free'],
         warning: 'Contains Tree Nuts'
       },
       'peanuts': {
         keywords: ['peanut', 'groundnut', 'arachis'],
+        excludeKeywords: [],
+        checkLabels: ['peanut-free'],
         warning: 'Contains Peanuts'
       },
       'soy-free': {
         keywords: ['soy', 'soya', 'soybeans', 'tofu', 'tempeh', 'miso'],
+        excludeKeywords: [],
+        checkLabels: ['soy-free'],
         warning: 'Contains Soy'
       },
       'eggs': {
         keywords: ['egg', 'albumin', 'mayonnaise', 'meringue'],
+        excludeKeywords: [],
+        checkLabels: ['egg-free', 'vegan'],
         warning: 'Contains Eggs'
       },
       'shellfish': {
         keywords: ['shrimp', 'crab', 'lobster', 'shellfish', 'prawn', 'crawfish'],
+        excludeKeywords: [],
+        checkLabels: ['shellfish-free'],
         warning: 'Contains Shellfish'
       },
       'fish': {
         keywords: ['fish', 'salmon', 'tuna', 'cod', 'anchovy', 'sardine', 'trout'],
+        excludeKeywords: [],
+        checkLabels: ['fish-free'],
         warning: 'Contains Fish'
       },
       'no-dyes': {
-        keywords: ['red 40', 'yellow 5', 'yellow 6', 'blue 1', 'red 3', 'e129', 'e102', 'e110', 'e133', 'e127', 
+        keywords: ['red 40', 'yellow 5', 'yellow 6', 'blue 1', 'red 3', 'e129', 'e102', 'e110', 'e133', 'e127',
                    'artificial color', 'fd&c', 'food coloring', 'food dye'],
+        excludeKeywords: [],
+        checkLabels: [],
         warning: 'Contains Artificial Dyes'
       },
       'low-sugar': {
         keywords: ['high fructose corn syrup', 'corn syrup', 'dextrose', 'maltose', 'sucrose'],
+        excludeKeywords: [],
+        checkLabels: [],
         warning: 'High Sugar Content',
         checkNutrients: true,
         nutrientThreshold: 10
       },
       'low-sodium': {
         keywords: ['salt', 'sodium'],
+        excludeKeywords: [],
+        checkLabels: [],
         warning: 'High Sodium Content',
         checkNutrients: true,
         nutrientThreshold: 400
       },
       'no-msg': {
         keywords: ['msg', 'monosodium glutamate', 'e621', 'glutamate', 'yeast extract'],
+        excludeKeywords: [],
+        checkLabels: [],
         warning: 'Contains MSG'
       }
     };
@@ -800,11 +826,33 @@ class ProductService {
       const filterData = allergenMap[filter];
       if (!filterData) return;
 
+      // STEP 1: Check if product has certification labels (MOST RELIABLE)
+      if (filterData.checkLabels && filterData.checkLabels.length > 0) {
+        const hasCertification = filterData.checkLabels.some(label => labels.includes(label));
+        if (hasCertification) {
+          console.log(`✅ ${filter}: Product certified safe (${filterData.checkLabels.join(', ')})`);
+          return;
+        }
+      }
+
       let found = false;
+
+      // STEP 2: Check ingredients for allergen keywords
       if (filterData.keywords) {
+        // First, check if any EXCLUDE keywords are present
+        if (filterData.excludeKeywords && filterData.excludeKeywords.length > 0) {
+          const hasExclude = filterData.excludeKeywords.some(keyword => ingredients.includes(keyword));
+          if (hasExclude) {
+            console.log(`✅ ${filter}: Excluded by safe ingredient`);
+            return;
+          }
+        }
+
+        // Now check for allergen keywords
         found = filterData.keywords.some(keyword => ingredients.includes(keyword));
       }
 
+      // STEP 3: Check nutrient thresholds
       if (filterData.checkNutrients && product.nutriments) {
         if (filter === 'low-sugar' && product.nutriments['sugars_100g'] > filterData.nutrientThreshold) {
           found = true;
@@ -814,12 +862,13 @@ class ProductService {
         }
       }
 
+      // STEP 4: Add warning if allergen found
       if (found) {
         warnings.push({
           title: `⚠️ ${filterData.warning}`,
-          description: `This product contains ingredients you've marked to avoid in your profile settings.`,
-          severity: 'critical'
+          severity: 'high'
         });
+        console.log(`⚠️ ${filter}: Allergen detected - ${filterData.warning}`);
       }
     });
 
