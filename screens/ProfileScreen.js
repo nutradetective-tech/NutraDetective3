@@ -50,7 +50,7 @@ const ProfileScreen = ({
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
-      
+
       <ResponsiveContainer>
         <LinearGradient
           colors={['#667EEA', '#764BA2']}
@@ -64,7 +64,7 @@ const ProfileScreen = ({
             <Text style={styles.profileAvatarIcon}>{userSettings.profileInitials}</Text>
           </LinearGradient>
           <Text style={styles.profileNameWhite}>{userSettings.userName}</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             onPress={() => setShowNameEditModal(true)}
             style={styles.editNameButton}
           >
@@ -98,27 +98,27 @@ const ProfileScreen = ({
 
             {/* 🔥 PREMIUM TOGGLE - FOR TESTING ONLY */}
             <TouchableOpacity
-              style={[styles.settingItem, { 
-                backgroundColor: '#FEF2F2', 
-                borderWidth: 2, 
+              style={[styles.settingItem, {
+                backgroundColor: '#FEF2F2',
+                borderWidth: 2,
                 borderColor: '#8B5CF6',
                 marginBottom: 12
               }]}
               onPress={async () => {
                 try {
                   const currentStatus = await PremiumService.isPremium();
-                  
+
                   if (currentStatus) {
                     await PremiumService.deactivateTestPremium();
                     Alert.alert(
-                      '✅ Premium Deactivated', 
+                      '✅ Premium Deactivated',
                       'You are now on the free Seeker tier (7 scans/day).',
                       [{ text: 'OK' }]
                     );
                   } else {
                     await PremiumService.activateTestPremium();
                     Alert.alert(
-                      '🎉 Guardian Activated!', 
+                      '🎉 Guardian Activated!',
                       'You now have Guardian tier for 30 days!\n\n✅ Unlimited scans\n✅ Unlimited history\n✅ No ads (coming soon)',
                       [{ text: 'Awesome!' }]
                     );
@@ -140,8 +140,8 @@ const ProfileScreen = ({
                 <Text style={styles.settingArrow}>→</Text>
               </View>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.settingItem}
               onPress={() => setShowGoalModal(true)}
             >
@@ -155,7 +155,7 @@ const ProfileScreen = ({
               </View>
             </TouchableOpacity>
 
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.settingItem}
               onPress={() => setShowStatsModal(true)}
             >
@@ -187,21 +187,21 @@ const ProfileScreen = ({
 
         {/* Bottom Navigation */}
         <View style={styles.bottomNav}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.navItem}
             onPress={() => setActiveTab('home')}
           >
             <Text style={styles.navIcon}>🏠</Text>
             <Text style={styles.navLabel}>Home</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.navItem}
             onPress={() => setActiveTab('history')}
           >
             <Text style={styles.navIcon}>📊</Text>
             <Text style={styles.navLabel}>History</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={[styles.navItem, styles.navItemActive]}
             onPress={() => setActiveTab('profile')}
           >
@@ -215,16 +215,14 @@ const ProfileScreen = ({
         </View>
 
         {/* Modals */}
-        <NameEditModal 
+        <NameEditModal
           visible={showNameEditModal}
-          tempName={tempName}
-          setTempName={setTempName}
+          currentName={userSettings.userName}
           onClose={() => {
-            setTempName(userSettings.userName);
             setShowNameEditModal(false);
           }}
-          onSave={async () => {
-            await UserSettingsService.updateUserName(tempName);
+          onSave={async (newName) => {
+            await UserSettingsService.updateUserName(newName);
             const newSettings = await UserSettingsService.getSettings();
             setUserSettings(newSettings);
             setShowNameEditModal(false);
@@ -232,14 +230,12 @@ const ProfileScreen = ({
         />
         <GoalEditModal
           visible={showGoalModal}
-          tempGoal={tempGoal}
-          setTempGoal={setTempGoal}
+          currentGoal={userSettings.scanGoal}
           onClose={() => {
-            setTempGoal(userSettings.scanGoal);
             setShowGoalModal(false);
           }}
-          onSave={async () => {
-            await UserSettingsService.updateScanGoal(tempGoal);
+          onSave={async (newGoal) => {
+            await UserSettingsService.updateScanGoal(newGoal);
             const newSettings = await UserSettingsService.getSettings();
             setUserSettings(newSettings);
             setShowGoalModal(false);
@@ -247,14 +243,12 @@ const ProfileScreen = ({
         />
         <StatsSelectorModal
           visible={showStatsModal}
-          tempStats={tempStats}
-          setTempStats={setTempStats}
+          currentStats={userSettings.dashboardStats}
           onClose={() => {
-            setTempStats(userSettings.dashboardStats);
             setShowStatsModal(false);
           }}
-          onSave={async () => {
-            await UserSettingsService.updateDashboardStats(tempStats);
+          onSave={async (newStats) => {
+            await UserSettingsService.updateDashboardStats(newStats);
             const newSettings = await UserSettingsService.getSettings();
             setUserSettings(newSettings);
             setShowStatsModal(false);

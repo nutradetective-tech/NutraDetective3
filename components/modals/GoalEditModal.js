@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -8,55 +8,71 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const GoalEditModal = ({ visible, tempGoal, setTempGoal, onClose, onSave }) => (
-  <Modal 
-    visible={visible} 
-    transparent 
-    animationType="slide"
-    onRequestClose={onClose}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        <Text style={styles.modalTitle}>Daily Scan Goal</Text>
-        <View style={styles.goalSelector}>
-          <TouchableOpacity 
-            style={styles.goalButton}
-            onPress={() => setTempGoal(Math.max(1, tempGoal - 1))}
-          >
-            <Text style={styles.goalButtonText}>−</Text>
-          </TouchableOpacity>
-          <Text style={styles.goalValue}>{tempGoal}</Text>
-          <TouchableOpacity 
-            style={styles.goalButton}
-            onPress={() => setTempGoal(Math.min(50, tempGoal + 1))}
-          >
-            <Text style={styles.goalButtonText}>+</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.goalHint}>Set a daily target for scanning products</Text>
-        <View style={styles.modalButtons}>
-          <TouchableOpacity 
-            style={styles.modalCancelButton}
-            onPress={onClose}
-          >
-            <Text style={styles.modalCancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.modalSaveButton}
-            onPress={onSave}
-          >
-            <LinearGradient
-              colors={['#667EEA', '#764BA2']}
-              style={styles.modalGradientButton}
+const GoalEditModal = ({ visible, currentGoal, onClose, onSave }) => {
+  // Manage state internally to prevent parent re-renders
+  const [localGoal, setLocalGoal] = useState(currentGoal);
+
+  // Update local state when modal opens
+  useEffect(() => {
+    if (visible) {
+      setLocalGoal(currentGoal);
+    }
+  }, [visible, currentGoal]);
+
+  const handleSave = () => {
+    onSave(localGoal);
+  };
+
+  return (
+    <Modal 
+      visible={visible} 
+      transparent 
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Daily Scan Goal</Text>
+          <View style={styles.goalSelector}>
+            <TouchableOpacity 
+              style={styles.goalButton}
+              onPress={() => setLocalGoal(Math.max(1, localGoal - 1))}
             >
-              <Text style={styles.modalSaveText}>Save</Text>
-            </LinearGradient>
-          </TouchableOpacity>
+              <Text style={styles.goalButtonText}>−</Text>
+            </TouchableOpacity>
+            <Text style={styles.goalValue}>{localGoal}</Text>
+            <TouchableOpacity 
+              style={styles.goalButton}
+              onPress={() => setLocalGoal(Math.min(50, localGoal + 1))}
+            >
+              <Text style={styles.goalButtonText}>+</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.goalHint}>Set a daily target for scanning products</Text>
+          <View style={styles.modalButtons}>
+            <TouchableOpacity 
+              style={styles.modalCancelButton}
+              onPress={onClose}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.modalSaveButton}
+              onPress={handleSave}
+            >
+              <LinearGradient
+                colors={['#667EEA', '#764BA2']}
+                style={styles.modalGradientButton}
+              >
+                <Text style={styles.modalSaveText}>Save</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 const styles = StyleSheet.create({
   modalOverlay: {

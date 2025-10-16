@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -10,11 +10,20 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const NameEditModal = ({ visible, tempName, setTempName, onClose, onSave }) => {
-  // iOS Fix: Prevent crash on empty string
+const NameEditModal = ({ visible, currentName, onClose, onSave }) => {
+  // iOS Fix: Manage state INSIDE modal to prevent parent re-renders
+  const [localName, setLocalName] = useState(currentName);
+
+  // Update local state when modal opens with new name
+  useEffect(() => {
+    if (visible) {
+      setLocalName(currentName);
+    }
+  }, [visible, currentName]);
+
   const handleSave = () => {
-    if (tempName && tempName.trim().length > 0) {
-      onSave();
+    if (localName && localName.trim().length > 0) {
+      onSave(localName);
     } else {
       // Don't save empty names, just close
       onClose();
@@ -32,21 +41,19 @@ const NameEditModal = ({ visible, tempName, setTempName, onClose, onSave }) => {
         <View style={styles.modalContent}>
           <Text style={styles.modalTitle}>Edit Display Name</Text>
           <TextInput
-            key="name-input" // iOS Fix: Prevents jumping
             style={styles.modalInput}
-            value={tempName}
-            onChangeText={setTempName}
+            value={localName}
+            onChangeText={setLocalName}
             placeholder="Enter your name"
             placeholderTextColor="#94A3B8"
             maxLength={20}
-            autoFocus={Platform.OS !== 'ios'} // iOS Fix: AutoFocus causes issues in modals
             autoCapitalize="words"
             autoCorrect={false}
             returnKeyType="done"
             onSubmitEditing={handleSave}
-            // iOS-specific optimizations
             enablesReturnKeyAutomatically={true}
             clearButtonMode="while-editing"
+            autoFocus={Platform.OS !== 'ios'}
           />
           <View style={styles.modalButtons}>
             <TouchableOpacity 

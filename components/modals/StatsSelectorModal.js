@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -8,7 +8,17 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
-const StatsSelectorModal = ({ visible, tempStats, setTempStats, onClose, onSave }) => {
+const StatsSelectorModal = ({ visible, currentStats, onClose, onSave }) => {
+  // Manage state internally to prevent parent re-renders
+  const [localStats, setLocalStats] = useState(currentStats);
+
+  // Update local state when modal opens
+  useEffect(() => {
+    if (visible) {
+      setLocalStats(currentStats);
+    }
+  }, [visible, currentStats]);
+
   const availableStats = [
     { id: 'totalScans', name: 'Total Scans', icon: '📊' },
     { id: 'healthyPercent', name: 'Healthy %', icon: '✅' },
@@ -18,21 +28,25 @@ const StatsSelectorModal = ({ visible, tempStats, setTempStats, onClose, onSave 
   ];
 
   const toggleStat = (statId) => {
-    if (tempStats.includes(statId)) {
-      if (tempStats.length > 1) {
-        setTempStats(tempStats.filter(id => id !== statId));
+    if (localStats.includes(statId)) {
+      if (localStats.length > 1) {
+        setLocalStats(localStats.filter(id => id !== statId));
       }
     } else {
-      if (tempStats.length < 3) {
-        setTempStats([...tempStats, statId]);
+      if (localStats.length < 3) {
+        setLocalStats([...localStats, statId]);
       }
     }
   };
 
+  const handleSave = () => {
+    onSave(localStats);
+  };
+
   return (
-    <Modal 
-      visible={visible} 
-      transparent 
+    <Modal
+      visible={visible}
+      transparent
       animationType="slide"
       onRequestClose={onClose}
     >
@@ -45,32 +59,32 @@ const StatsSelectorModal = ({ visible, tempStats, setTempStats, onClose, onSave 
               key={stat.id}
               style={[
                 styles.statOption,
-                tempStats.includes(stat.id) && styles.statOptionActive
+                localStats.includes(stat.id) && styles.statOptionActive
               ]}
               onPress={() => toggleStat(stat.id)}
             >
               <Text style={styles.statOptionIcon}>{stat.icon}</Text>
               <Text style={[
                 styles.statOptionText,
-                tempStats.includes(stat.id) && styles.statOptionTextActive
+                localStats.includes(stat.id) && styles.statOptionTextActive
               ]}>
                 {stat.name}
               </Text>
-              {tempStats.includes(stat.id) && (
+              {localStats.includes(stat.id) && (
                 <Text style={styles.checkmark}>✓</Text>
               )}
             </TouchableOpacity>
           ))}
           <View style={styles.modalButtons}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalCancelButton}
               onPress={onClose}
             >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.modalSaveButton}
-              onPress={onSave}
+              onPress={handleSave}
             >
               <LinearGradient
                 colors={['#667EEA', '#764BA2']}

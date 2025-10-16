@@ -45,6 +45,40 @@ const HomeScreen = ({
     </View>
   );
 
+  // Early return for Camera Scanner - prevents HomeScreen from rendering
+  if (isScanning && scanMethod === 'camera') {
+    return (
+      <CameraScanner
+        onScanResult={(result) => {
+          handleBarcodeScan(result);
+        }}
+        onClose={() => {
+          setIsScanning(false);
+          setScanMethod(null);
+        }}
+      />
+    );
+  }
+
+  // Early return for Manual Scanner - prevents HomeScreen from rendering
+  if (isScanning && scanMethod === 'manual') {
+    return (
+      <SimpleScanner
+        onScanResult={handleBarcodeScan}
+        onClose={() => {
+          setIsScanning(false);
+          setScanMethod(null);
+        }}
+        onSwitchToCamera={() => {
+          setIsScanning(false);
+          setScanMethod(null);
+          setShowScanSelector(true);
+        }}
+      />
+    );
+  }
+
+  // Main HomeScreen render - only shows when NOT scanning
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -222,8 +256,6 @@ const HomeScreen = ({
                 </View>
               </View>
             )}
-
-            
           </Animated.View>
         </ScrollView>
 
@@ -256,39 +288,6 @@ const HomeScreen = ({
           </TouchableOpacity>
         </View>
       </ResponsiveContainer>
-
-      {/* Camera Scanner Modal */}
-      {isScanning && scanMethod === 'camera' ? (
-        <Modal visible={true} animationType="slide">
-          <CameraScanner
-            onScanResult={(result) => {
-              handleBarcodeScan(result);
-            }}
-            onClose={() => {
-              setIsScanning(false);
-              setScanMethod(null);
-            }}
-          />
-        </Modal>
-      ) : null}
-
-      {/* Manual Scanner Modal */}
-{isScanning && scanMethod === 'manual' && (
-  <Modal visible={true} animationType="slide">
-    <SimpleScanner
-      onScanResult={handleBarcodeScan}
-      onClose={() => {
-        setIsScanning(false);
-        setScanMethod(null);
-      }}
-      onSwitchToCamera={() => {
-        setIsScanning(false);
-        setScanMethod(null);
-        setShowScanSelector(true);
-      }}
-    />
-  </Modal>
-)}
 
       {/* Scanner Selection Modal */}
       <ScannerSelector
