@@ -1230,4 +1230,41 @@ cameraIconText: {
     color: '#6B7280',
   },
 
-});
+placeholderText: {
+    fontSize: 14,
+    color: '#6B7280',
+  },
+  userEmail: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  signOutButton: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+    marginHorizontal: 20,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  signOutIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  signOutText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#EF4444',
+  },
+});  // ← Keep this closing brace

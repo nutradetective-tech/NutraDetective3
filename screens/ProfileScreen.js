@@ -22,8 +22,12 @@ import PremiumService from '../services/PremiumService';
 import FirebaseStorageService from '../services/FirebaseStorageService';
 import { calculateStreak } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
+// ===== NEW: Firebase Auth imports =====
+import { auth } from '../config/firebase';
+import { signOut } from 'firebase/auth';
 
 const ProfileScreen = ({
+  user, // ===== NEW: User prop from App.js =====
   userSettings,
   setUserSettings,
   scanHistory,
@@ -42,16 +46,16 @@ const ProfileScreen = ({
   setActiveTab,
   styles,
 }) => {
-  // NEW STATE: Profile picture URI and upload status
+  // Profile picture state
   const [profilePictureUri, setProfilePictureUri] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // NEW: Load profile picture on component mount
+  // Load profile picture on component mount
   useEffect(() => {
     loadProfilePicture();
   }, []);
 
-  // NEW FUNCTION: Load saved profile picture from AsyncStorage
+  // Load saved profile picture from AsyncStorage
   const loadProfilePicture = async () => {
     try {
       const savedUri = await AsyncStorage.getItem('profilePictureUri');
@@ -63,12 +67,12 @@ const ProfileScreen = ({
     }
   };
 
-  // NEW FUNCTION: Pick image from gallery
+  // Pick image from gallery
   const pickProfileImage = async () => {
     try {
       // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
+
       if (status !== 'granted') {
         Alert.alert(
           'Permission Required',
@@ -88,15 +92,15 @@ const ProfileScreen = ({
 
       if (!result.canceled && result.assets && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        
+
         // Show confirmation
         Alert.alert(
           'Upload Profile Picture?',
           'This will replace your current profile picture.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Upload', 
+            {
+              text: 'Upload',
               onPress: () => uploadProfilePicture(imageUri)
             }
           ]
@@ -108,19 +112,25 @@ const ProfileScreen = ({
     }
   };
 
- // NEW FUNCTION: Upload image to Firebase Storage
-const uploadProfilePicture = async (imageUri) => {
-  setUploadingImage(true);
-  
-  try {
-    // For now, we'll use a simple user ID (replace with actual auth user ID later)
-    const userId = 'test-user-' + Date.now();
-    
-    // Upload to Firebase
-    const downloadUrl = await FirebaseStorageService.uploadProfilePicture(
-      userId,    // ✅ userId FIRST
-      imageUri   // ✅ imageUri SECOND
-    );
+  // ===== UPDATED: Upload image to Firebase Storage with REAL USER ID =====
+  const uploadProfilePicture = async (imageUri) => {
+    setUploadingImage(true);
+
+    try {
+      // ✅ USE REAL USER ID from authenticated user
+      if (!user || !user.uid) {
+        throw new Error('User not authenticated');
+      }
+
+      const userId = user.uid; // ✅ Real Firebase user ID
+
+      console.log('📤 Uploading profile picture for user:', userId);
+
+      // Upload to Firebase
+      const downloadUrl = await FirebaseStorageService.uploadProfilePicture(
+        userId,    // ✅ Real user ID
+        imageUri   // ✅ Image URI
+      );
 
       // Save URL to state and AsyncStorage
       setProfilePictureUri(downloadUrl);
@@ -143,6 +153,32 @@ const uploadProfilePicture = async (imageUri) => {
     }
   };
 
+  // ===== NEW: Sign Out Function =====
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🚪 Signing out user...');
+              await signOut(auth);
+              console.log('✅ User signed out successfully');
+              // Auth state listener in App.js will automatically show AuthScreen
+            } catch (error) {
+              console.error('❌ Sign out error:', error);
+              Alert.alert('Error', 'Failed to sign out. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const ResponsiveContainer = ({ children, style }) => (
     <View style={[
       styles.responsiveContainer,
@@ -163,9 +199,9 @@ const uploadProfilePicture = async (imageUri) => {
           style={styles.profileHeader}
         >
           <Text style={styles.profileHeaderTitle}>Profile</Text>
-          
-          {/* UPDATED: Make avatar tappable and show image or initials */}
-          <TouchableOpacity 
+
+          {/* Avatar with profile picture */}
+          <TouchableOpacity
             onPress={pickProfileImage}
             disabled={uploadingImage}
             activeOpacity={0.8}
@@ -175,23 +211,20 @@ const uploadProfilePicture = async (imageUri) => {
               style={styles.profileAvatarLarge}
             >
               {uploadingImage ? (
-                // Show loading spinner while uploading
                 <ActivityIndicator size="large" color="#FFF" />
               ) : profilePictureUri ? (
-                // Show uploaded profile picture
-                <Image 
+                <Image
                   source={{ uri: profilePictureUri }}
                   style={styles.profileImage}
                 />
               ) : (
-                // Show initials if no picture
                 <Text style={styles.profileAvatarIcon}>
                   {userSettings.profileInitials}
                 </Text>
               )}
             </LinearGradient>
-            
-            {/* NEW: Camera icon to indicate it's tappable */}
+
+            {/* Camera icon badge */}
             {!uploadingImage && (
               <View style={styles.cameraIconBadge}>
                 <Text style={styles.cameraIconText}>📷</Text>
@@ -206,6 +239,11 @@ const uploadProfilePicture = async (imageUri) => {
           >
             <Text style={styles.editNameText}>✏️ Edit Name</Text>
           </TouchableOpacity>
+
+          {/* ===== NEW: Display user email below name ===== */}
+          {user && user.email && (
+            <Text style={styles.userEmail}>{user.email}</Text>
+          )}
         </LinearGradient>
 
         <ScrollView style={styles.profileContent}>
@@ -316,6 +354,15 @@ const uploadProfilePicture = async (imageUri) => {
               </View>
               <Text style={styles.premiumArrow}>→</Text>
             </LinearGradient>
+          </TouchableOpacity>
+
+          {/* ===== NEW: Sign Out Button ===== */}
+          <TouchableOpacity
+            style={styles.signOutButton}
+            onPress={handleSignOut}
+          >
+            <Text style={styles.signOutIcon}>🚪</Text>
+            <Text style={styles.signOutText}>Sign Out</Text>
           </TouchableOpacity>
         </ScrollView>
 

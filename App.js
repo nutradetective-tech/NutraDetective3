@@ -28,6 +28,7 @@ import ResultsScreen from './screens/ResultsScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import ProfileScreen from './screens/ProfileScreen';
 import SplashScreen from './screens/SplashScreen';
+import AuthScreen from './screens/AuthScreen';
 import { LinearGradient } from 'expo-linear-gradient';
 import SimpleScanner from './components/SimpleScanner';
 import ProductService from './services/ProductService';
@@ -51,7 +52,16 @@ import NameEditModal from './components/modals/NameEditModal';
 import GoalEditModal from './components/modals/GoalEditModal';
 import StatsSelectorModal from './components/modals/StatsSelectorModal';
 
+// ===== FIREBASE AUTH IMPORTS (NEW) =====
+import { auth } from './config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+
 export default function App() {
+  // ===== AUTH STATE (NEW) =====
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // ===== EXISTING STATE =====
   const [testMode, setTestMode] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -82,6 +92,30 @@ export default function App() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const splashFadeAnim = useRef(new Animated.Value(0)).current;
 
+  // ===== FIREBASE AUTH STATE LISTENER (NEW) =====
+  useEffect(() => {
+    console.log('🔥 Setting up Firebase Auth listener...');
+    
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      if (currentUser) {
+        console.log('✅ User is signed in!');
+        console.log('👤 User ID:', currentUser.uid);
+        console.log('📧 Email:', currentUser.email);
+        setUser(currentUser);
+      } else {
+        console.log('❌ No user signed in');
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+
+    return () => {
+      console.log('🧹 Cleaning up auth listener');
+      unsubscribe();
+    };
+  }, []);
+
+  // ===== EXISTING INITIALIZATION =====
   useEffect(() => {
     const testFirebase = async () => {
       console.log('🔥 Starting Firebase Storage test...');
@@ -329,9 +363,27 @@ export default function App() {
     );
   };
 
+  // ===== SPLASH SCREEN (EXISTING) =====
   if (showSplash) {
     return <SplashScreen splashFadeAnim={splashFadeAnim} styles={{}} />;
   }
+
+  // ===== AUTH LOADING SCREEN (NEW) =====
+  if (authLoading) {
+    return (
+      <View style={authStyles.loadingContainer}>
+        <ActivityIndicator size="large" color="#667EEA" />
+        <Text style={authStyles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // ===== SHOW AUTH SCREEN IF NOT LOGGED IN (NEW) =====
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  // ===== REST OF APP (ONLY SHOWS WHEN LOGGED IN) =====
 
   if (testMode) {
     return (
@@ -407,6 +459,7 @@ export default function App() {
   if (activeTab === 'profile') {
     return (
       <ProfileScreen
+        user={user}
         userSettings={userSettings}
         setUserSettings={setUserSettings}
         scanHistory={scanHistory}
@@ -466,3 +519,18 @@ export default function App() {
     </SafeAreaProvider>
   );
 }
+
+// ===== AUTH LOADING STYLES (NEW) =====
+const authStyles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFF',
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#667EEA',
+  },
+});
