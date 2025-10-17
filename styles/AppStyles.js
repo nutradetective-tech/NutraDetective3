@@ -894,6 +894,28 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  // NEW: Profile Picture Upload Styles
+profileImage: {
+  width: '100%',
+  height: '100%',
+  borderRadius: 50,
+},
+cameraIconBadge: {
+  position: 'absolute',
+  bottom: 0,
+  right: 0,
+  backgroundColor: '#667EEA',
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  justifyContent: 'center',
+  alignItems: 'center',
+  borderWidth: 3,
+  borderColor: '#FFF',
+},
+cameraIconText: {
+  fontSize: 16,
+},
   profileContent: {
     flex: 1,
     marginTop: -20,

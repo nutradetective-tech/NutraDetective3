@@ -52,7 +52,7 @@ import GoalEditModal from './components/modals/GoalEditModal';
 import StatsSelectorModal from './components/modals/StatsSelectorModal';
 
 export default function App() {
-  const [testMode, setTestMode] = useState(true);
+  const [testMode, setTestMode] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(null);
