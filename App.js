@@ -17,6 +17,7 @@ import {
   Platform,
   TextInput,
 } from 'react-native';
+import FirebaseStorageService from './services/FirebaseStorageService';
 import PremiumService from './services/PremiumService';
 import UpgradeModal from './components/modals/UpgradeModal.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -83,30 +84,49 @@ export default function App() {
   const splashFadeAnim = useRef(new Animated.Value(0)).current;
 
   // Load history and settings when app starts
-  useEffect(() => {
-    // Fade in splash screen
-    Animated.timing(splashFadeAnim, {
-      toValue: 1,
-      duration: 500,
-      useNativeDriver: true,
-    }).start();
+useEffect(() => {
+  // ===== TEST FIREBASE STORAGE CONNECTION =====
+  const testFirebase = async () => {
+    console.log('🔥 Starting Firebase Storage test...');
+    try {
+      const isConnected = await FirebaseStorageService.testConnection();
+      if (isConnected) {
+        console.log('🎉 Firebase Storage is ready to use!');
+      } else {
+        console.error('⚠️ Firebase Storage connection failed');
+      }
+    } catch (error) {
+      console.error('❌ Firebase test error:', error);
+    }
+  };
+  
+  testFirebase();
 
-    // Hide splash after 2 seconds
-    setTimeout(() => {
-      Animated.timing(splashFadeAnim, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-      }).start(() => {
-        setShowSplash(false);
-      });
-    }, 2000);
-    
-    loadUserSettings();
-    loadHistory();
-    startPulseAnimation();
-    fadeIn();
-  }, []);
+  // ===== END FIREBASE TEST =====
+
+  // Fade in splash screen
+  Animated.timing(splashFadeAnim, {
+    toValue: 1,
+    duration: 500,
+    useNativeDriver: true,
+  }).start();
+
+  // Hide splash after 2 seconds
+  setTimeout(() => {
+    Animated.timing(splashFadeAnim, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setShowSplash(false);
+    });
+  }, 2000);
+  
+  loadUserSettings();
+  loadHistory();
+  startPulseAnimation();
+  fadeIn();
+}, []);
 
   // Load user settings
   const loadUserSettings = async () => {

@@ -50,6 +50,13 @@
           "cameraPermission": "Allow NutraDetective to access your camera to scan barcodes."
         }
       ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow NutraDetective to access your photos to upload product images.",
+          "cameraPermission": "Allow NutraDetective to access your camera to take product photos."
+        }
+      ],
       "expo-font",
       "expo-asset"
     ],
