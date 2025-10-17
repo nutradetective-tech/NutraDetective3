@@ -18,6 +18,7 @@ import {
   TextInput,
 } from 'react-native';
 import FirebaseStorageService from './services/FirebaseStorageService';
+import ImagePickerTest from './components/ImagePickerTest';
 import PremiumService from './services/PremiumService';
 import UpgradeModal from './components/modals/UpgradeModal.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -51,6 +52,7 @@ import GoalEditModal from './components/modals/GoalEditModal';
 import StatsSelectorModal from './components/modals/StatsSelectorModal';
 
 export default function App() {
+  const [testMode, setTestMode] = useState(true); // Set to true to test image picker
   const [isScanning, setIsScanning] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [currentProduct, setCurrentProduct] = useState(null);
@@ -364,6 +366,28 @@ const saveToHistory = async (product) => {
   // SPLASH SCREEN
   if (showSplash) {
     return <SplashScreen splashFadeAnim={splashFadeAnim} styles={{}} />;
+  }
+
+// TEST MODE: Image Picker Test
+  if (testMode) {
+    return (
+      <SafeAreaView style={{ flex: 1 }}>
+        <ImagePickerTest />
+        <TouchableOpacity 
+          style={{ 
+            position: 'absolute', 
+            top: 40, 
+            right: 20, 
+            backgroundColor: '#667EEA', 
+            padding: 10, 
+            borderRadius: 5 
+          }}
+          onPress={() => setTestMode(false)}
+        >
+          <Text style={{ color: '#fff', fontWeight: 'bold' }}>Exit Test</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
   }
 
   // LOADING SCREEN
