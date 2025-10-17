@@ -5,12 +5,12 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   StatusBar,
   Animated,
   Image,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import ProductService from '../services/ProductService';
@@ -26,7 +26,7 @@ const ResultsScreen = ({
   setScanMethod,
   setIsScanning,
   fadeAnim,
-  styles, // Pass styles from App.js for now
+  styles,
 }) => {
   const ResponsiveContainer = ({ children, style }) => (
     <View style={[
@@ -38,16 +38,13 @@ const ResultsScreen = ({
     </View>
   );
 
-  // Get the product data (handle both mock and real API data)
   const productData = currentProduct.rawData || currentProduct;
   
-  // Check for user allergen matches
   const userAllergenWarnings = ProductService.checkUserAllergens(
     productData,
     userSettings.activeFilters
   );
 
-  // Parse allergens from the product
   const getAllergens = () => {
     if (productData.displayData?.mainAllergens) {
       return productData.displayData.mainAllergens;
@@ -85,7 +82,6 @@ const ResultsScreen = ({
         <ScrollView showsVerticalScrollIndicator={false}>
           <Animated.View style={[styles.resultContent, { opacity: fadeAnim }]}>
             
-            {/* Product Header - Contains Grade, Product Info, and Status Badge */}
             <View style={[styles.productHeaderCard, { backgroundColor: getResultBackgroundColor(currentProduct.healthScore?.score || 0) }]}>
               <LinearGradient
                 colors={getGradeGradient(currentProduct?.healthScore?.score || 0)}
@@ -96,7 +92,6 @@ const ResultsScreen = ({
                 </Text>
               </LinearGradient>
 
-              {/* Product Image */}
               <View style={styles.productImageContainer}>
                 {currentProduct.image_url === '🍫' ? (
                   <Text style={[styles.placeholderIcon, { fontSize: 60 }]}>🍫</Text>
@@ -115,14 +110,13 @@ const ResultsScreen = ({
               </View>
 
               <View style={styles.productInfo}>
-  <Text style={styles.productName}>
-    {currentProduct.name || currentProduct.product_name || 'Unknown Product'}
-  </Text>
-  <Text style={styles.productBrand}>
-    {currentProduct.brand || currentProduct.brands || 'Unknown Brand'} • {currentProduct.categories?.split(',')[0] || 'Food Product'}
-  </Text>
-  
-</View>
+                <Text style={styles.productName}>
+                  {currentProduct.name || currentProduct.product_name || 'Unknown Product'}
+                </Text>
+                <Text style={styles.productBrand}>
+                  {currentProduct.brand || currentProduct.brands || 'Unknown Brand'} • {currentProduct.categories?.split(',')[0] || 'Food Product'}
+                </Text>
+              </View>
 
               <View style={styles.statusContainer}>
                 <View style={[styles.statusBadge, { backgroundColor: getStatusBadgeColor(currentProduct.healthScore?.score || 0) }]}>
@@ -136,7 +130,6 @@ const ResultsScreen = ({
               </View>
             </View>
 
-            {/* User Allergen Alert - Only show if user has allergen matches */}
             {userAllergenWarnings && userAllergenWarnings.length > 0 && (
               <View style={styles.allergenAlertBox}>
                 <View style={styles.allergenHeader}>
@@ -147,7 +140,6 @@ const ResultsScreen = ({
                   This product contains ingredients you've marked to avoid in your profile settings.
                 </Text>
                 {userAllergenWarnings.map((warning, index) => {
-                  // Check if it's tree nuts and show the correct allergen
                   const displayWarning = warning.title.includes('tree-nuts') ? 
                     'Contains Tree Nuts (Hazelnuts)' : 
                     warning.title.replace('⚠️ ', '');
@@ -161,7 +153,6 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* All Allergens Section - NEW */}
             {allAllergens.length > 0 && (
               <View style={styles.allergensSection}>
                 <Text style={styles.sectionTitle}>🥜 All Allergens</Text>
@@ -176,14 +167,12 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* Nutrition Facts - NEW */}
             {(productData.nutriments || productData.displayData?.keyNutrients) && (
               <View style={styles.nutritionSection}>
                 <Text style={styles.sectionTitle}>📊 Nutrition Facts</Text>
                 <Text style={styles.nutritionSubtext}>Per 100g</Text>
                 <View style={styles.nutritionGrid}>
                   {productData.displayData?.keyNutrients ? (
-                    // Use display data if available
                     Object.entries(productData.displayData.keyNutrients).map(([key, value], index) => (
                       <View key={index} style={styles.nutritionItem}>
                         <Text style={styles.nutritionLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
@@ -191,7 +180,6 @@ const ResultsScreen = ({
                       </View>
                     ))
                   ) : (
-                    // Use raw nutriments data
                     <>
                       <View style={styles.nutritionItem}>
                         <Text style={styles.nutritionLabel}>Calories</Text>
@@ -225,26 +213,24 @@ const ResultsScreen = ({
                   )}
                 </View>
  
-{productData.serving_size && (
-  <View style={styles.nutritionItem}>
-    <Text style={styles.nutritionLabel}>Serving Size</Text>
-    <Text style={styles.nutritionValue}>{productData.serving_size}</Text>
-  </View>
-)}
+                {productData.serving_size && (
+                  <View style={styles.nutritionItem}>
+                    <Text style={styles.nutritionLabel}>Serving Size</Text>
+                    <Text style={styles.nutritionValue}>{productData.serving_size}</Text>
+                  </View>
+                )}
 
-{/* ADD CONTAINER SIZE */}
-{(productData.quantity || currentProduct.netQuantity) && (
-  <View style={styles.nutritionItem}>
-    <Text style={styles.nutritionLabel}>Container Size</Text>
-    <Text style={styles.nutritionValue}>
-      {productData.quantity || currentProduct.netQuantity}
-    </Text>
-  </View>
-)}
+                {(productData.quantity || currentProduct.netQuantity) && (
+                  <View style={styles.nutritionItem}>
+                    <Text style={styles.nutritionLabel}>Container Size</Text>
+                    <Text style={styles.nutritionValue}>
+                      {productData.quantity || currentProduct.netQuantity}
+                    </Text>
+                  </View>
+                )}
               </View>
             )}
 
-            {/* Positive Aspects */}
             {(currentProduct.positiveAttributes || currentProduct.positiveAspects) && 
              (currentProduct.positiveAttributes?.length > 0 || currentProduct.positiveAspects?.length > 0) && (
               <View style={styles.positiveSection}>
@@ -258,7 +244,6 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* Health Warnings */}
             {(currentProduct.healthScore?.warnings || currentProduct.warnings) && 
              (currentProduct.healthScore?.warnings?.length > 0 || currentProduct.warnings?.length > 0) && (
               <View style={styles.warningsContainer}>
@@ -286,7 +271,6 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* Additives Section - NEW */}
             {(currentProduct.additives && currentProduct.additives.length > 0) || 
              (productData.additives_tags && productData.additives_tags.length > 0) ? (
               <View style={styles.additivesSection}>
@@ -315,7 +299,6 @@ const ResultsScreen = ({
               </View>
             ) : null}
 
-            {/* Ingredients Section - NEW */}
             {productData.ingredients_text && (
               <View style={styles.ingredientsSection}>
                 <Text style={styles.sectionTitle}>📝 Ingredients</Text>
@@ -323,7 +306,6 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* Processing Level - NEW */}
             {productData.nova_group && (
               <View style={styles.processingSection}>
                 <Text style={styles.sectionTitle}>🏭 Processing Level</Text>
@@ -346,7 +328,6 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* Nutri-Score Section - NEW */}
             {productData.nutrition_grades && (
               <View style={styles.nutriScoreSection}>
                 <Text style={styles.sectionTitle}>🎯 Nutri-Score</Text>
@@ -367,7 +348,6 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* Action Buttons */}
             <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 20, paddingHorizontal: 15 }}>
               <TouchableOpacity
                 style={{ 
@@ -393,24 +373,24 @@ const ResultsScreen = ({
                   overflow: 'hidden',
                 }}
                 onPress={async () => {
-  const shareMessage = `🔍 NutraDetective Scan Results\n\n` +
-    `📦 ${currentProduct.name}\n` +
-    `🏷️ ${currentProduct.brand}\n` +
-    `📊 Grade: ${currentProduct.healthScore?.grade || '?'}\n` +
-    `⭐ Score: ${currentProduct.healthScore?.score || 0}/100\n\n` +
-    `${currentProduct.healthScore?.status || 'Unknown Status'}\n\n` +
-    `Scanned with NutraDetective\n` +
-    `Download: nutradetective.com`;
+                  const shareMessage = `🔍 NutraDetective Scan Results\n\n` +
+                    `📦 ${currentProduct.name}\n` +
+                    `🏷️ ${currentProduct.brand}\n` +
+                    `📊 Grade: ${currentProduct.healthScore?.grade || '?'}\n` +
+                    `⭐ Score: ${currentProduct.healthScore?.score || 0}/100\n\n` +
+                    `${currentProduct.healthScore?.status || 'Unknown Status'}\n\n` +
+                    `Scanned with NutraDetective\n` +
+                    `Download: nutradetective.com`;
 
-  try {
-    await Share.share({
-      message: shareMessage,
-      title: 'NutraDetective Scan Results'
-    });
-  } catch (error) {
-    Alert.alert('Error', 'Could not share results');
-  }
-}}
+                  try {
+                    await Share.share({
+                      message: shareMessage,
+                      title: 'NutraDetective Scan Results'
+                    });
+                  } catch (error) {
+                    Alert.alert('Error', 'Could not share results');
+                  }
+                }}
               >
                 <LinearGradient
                   colors={['#E91E63', '#9C27B0']}
@@ -432,7 +412,6 @@ const ResultsScreen = ({
   );
 };
 
-// Add these additional styles to your AppStyles.js
 const additionalStyles = StyleSheet.create({
   servingSizeContainer: {
     flexDirection: 'row',

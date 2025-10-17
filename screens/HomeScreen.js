@@ -7,10 +7,10 @@ import {
   StyleSheet,
   Animated,
   Modal,
-  SafeAreaView,
   StatusBar,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import CameraScanner from '../components/CameraScanner';
 import SimpleScanner from '../components/SimpleScanner';
@@ -45,7 +45,6 @@ const HomeScreen = ({
     </View>
   );
 
-  // Early return for Camera Scanner - prevents HomeScreen from rendering
   if (isScanning && scanMethod === 'camera') {
     return (
       <CameraScanner
@@ -60,7 +59,6 @@ const HomeScreen = ({
     );
   }
 
-  // Early return for Manual Scanner - prevents HomeScreen from rendering
   if (isScanning && scanMethod === 'manual') {
     return (
       <SimpleScanner
@@ -78,7 +76,6 @@ const HomeScreen = ({
     );
   }
 
-  // Main HomeScreen render - only shows when NOT scanning
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -86,10 +83,8 @@ const HomeScreen = ({
       <ResponsiveContainer>
         <ScrollView showsVerticalScrollIndicator={false}>
           <Animated.View style={{ opacity: fadeAnim }}>
-            {/* Header Section with Logo */}
             <View style={[styles.homeHeader, styles.cardShadow]}>
               <View style={styles.headerLeft}>
-                {/* Logo Header */}
                 <View style={styles.logoHeader}>
                   <LinearGradient
                     colors={['#667EEA', '#764BA2']}
@@ -107,7 +102,6 @@ const HomeScreen = ({
                   </Text>
                 </View>
                 
-                {/* Greeting */}
                 <View style={styles.greetingContainer}>
                   <Text style={[
                     styles.greeting,
@@ -127,7 +121,6 @@ const HomeScreen = ({
               </LinearGradient>
             </View>
 
-            {/* Dynamic Stats Grid */}
             <View style={[
               styles.statsGrid,
               isTablet && styles.statsGridTablet
@@ -181,7 +174,6 @@ const HomeScreen = ({
               })}
             </View>
 
-            {/* Main Scan Button with Gradient and Pulse */}
             <TouchableOpacity
               style={styles.scanButtonWrapper}
               onPress={() => setShowScanSelector(true)}
@@ -221,7 +213,6 @@ const HomeScreen = ({
               </Animated.View>
             </TouchableOpacity>
 
-            {/* Recent Scans Section with Cards */}
             {scanHistory.length > 0 && (
               <View style={styles.recentSection}>
                 <Text style={styles.recentTitle}>Recent Scans</Text>
@@ -259,7 +250,6 @@ const HomeScreen = ({
           </Animated.View>
         </ScrollView>
 
-        {/* Bottom Navigation with Gradient Active Indicator */}
         <View style={styles.bottomNav}>
           <TouchableOpacity 
             style={[styles.navItem, styles.navItemActive]}
@@ -289,7 +279,6 @@ const HomeScreen = ({
         </View>
       </ResponsiveContainer>
 
-      {/* Scanner Selection Modal */}
       <ScannerSelector
         visible={showScanSelector}
         onSelectCamera={() => {

@@ -3,12 +3,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   StyleSheet,
-   Alert,
+  Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import NameEditModal from '../components/modals/NameEditModal';
 import GoalEditModal from '../components/modals/GoalEditModal';
@@ -35,7 +35,7 @@ const ProfileScreen = ({
   tempStats,
   setTempStats,
   setActiveTab,
-  styles, // Pass styles from App.js for now
+  styles,
 }) => {
   const ResponsiveContainer = ({ children, style }) => (
     <View style={[
@@ -92,11 +92,9 @@ const ProfileScreen = ({
             </View>
           </View>
 
-          {/* Settings Section */}
           <View style={styles.settingsSection}>
             <Text style={styles.sectionTitle}>Personalization</Text>
 
-            {/* 🔥 PREMIUM TOGGLE - FOR TESTING ONLY */}
             <TouchableOpacity
               style={[styles.settingItem, {
                 backgroundColor: '#FEF2F2',
@@ -185,7 +183,6 @@ const ProfileScreen = ({
           </TouchableOpacity>
         </ScrollView>
 
-        {/* Bottom Navigation */}
         <View style={styles.bottomNav}>
           <TouchableOpacity
             style={styles.navItem}
@@ -214,7 +211,6 @@ const ProfileScreen = ({
           </TouchableOpacity>
         </View>
 
-        {/* Modals */}
         <NameEditModal
           visible={showNameEditModal}
           currentName={userSettings.userName}
