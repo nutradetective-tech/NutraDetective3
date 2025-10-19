@@ -17,7 +17,6 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import FirebaseStorageService from './services/FirebaseStorageService';
 import ImagePickerTest from './components/ImagePickerTest';
 import PremiumService from './services/PremiumService';
 import UpgradeModal from './components/modals/UpgradeModal.js';
@@ -52,12 +51,11 @@ import NameEditModal from './components/modals/NameEditModal';
 import GoalEditModal from './components/modals/GoalEditModal';
 import StatsSelectorModal from './components/modals/StatsSelectorModal';
 
-// ===== FIREBASE AUTH IMPORTS (NEW) =====
-import { auth } from './config/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+// ===== SUPABASE AUTH IMPORTS =====
+import { supabase } from './config/supabase';
 
 export default function App() {
-  // ===== AUTH STATE (NEW) =====
+  // ===== AUTH STATE =====
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
@@ -73,7 +71,7 @@ export default function App() {
   const [scanMethod, setScanMethod] = useState(null);
   const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [showScanSelector, setShowScanSelector] = useState(false);
-  
+
   const [userSettings, setUserSettings] = useState(DEFAULT_SETTINGS);
   const [showNameEditModal, setShowNameEditModal] = useState(false);
   const [showFiltersModal, setShowFiltersModal] = useState(false);
@@ -82,56 +80,55 @@ export default function App() {
   const [tempName, setTempName] = useState('');
   const [tempGoal, setTempGoal] = useState(5);
   const [tempStats, setTempStats] = useState(['totalScans', 'healthyPercent', 'streak']);
-  
+
   const [isPremium, setIsPremium] = useState(false);
   const [todayScans, setTodayScans] = useState(0);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [upgradeReason, setUpgradeReason] = useState('general');
-  
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const splashFadeAnim = useRef(new Animated.Value(0)).current;
 
-  // ===== FIREBASE AUTH STATE LISTENER (NEW) =====
+  // ===== SUPABASE AUTH STATE LISTENER =====
   useEffect(() => {
-    console.log('🔥 Setting up Firebase Auth listener...');
-    
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        console.log('✅ User is signed in!');
-        console.log('👤 User ID:', currentUser.uid);
-        console.log('📧 Email:', currentUser.email);
-        setUser(currentUser);
+    console.log('🔷 Setting up Supabase Auth listener...');
+
+    // Check for existing session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        console.log('✅ Existing session found!');
+        console.log('👤 User ID:', session.user.id);
+        console.log('📧 Email:', session.user.email);
+        setUser(session.user);
       } else {
-        console.log('❌ No user signed in');
+        console.log('❌ No active session');
         setUser(null);
       }
       setAuthLoading(false);
     });
 
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        console.log('✅ User signed in!');
+        console.log('👤 User ID:', session.user.id);
+        console.log('📧 Email:', session.user.email);
+        setUser(session.user);
+      } else {
+        console.log('❌ User signed out');
+        setUser(null);
+      }
+    });
+
     return () => {
       console.log('🧹 Cleaning up auth listener');
-      unsubscribe();
+      subscription.unsubscribe();
     };
   }, []);
 
-  // ===== EXISTING INITIALIZATION =====
-  useEffect(() => {
-    const testFirebase = async () => {
-      console.log('🔥 Starting Firebase Storage test...');
-      try {
-        const isConnected = await FirebaseStorageService.testConnection();
-        if (isConnected) {
-          console.log('🎉 Firebase Storage is ready to use!');
-        } else {
-          console.error('⚠️ Firebase Storage connection failed');
-        }
-      } catch (error) {
-        console.error('❌ Firebase test error:', error);
-      }
-    };
-    
-    testFirebase();
+useEffect(() => {
+
 
     Animated.timing(splashFadeAnim, {
       toValue: 1,
@@ -148,7 +145,7 @@ export default function App() {
         setShowSplash(false);
       });
     }, 2000);
-    
+
     loadUserSettings();
     loadHistory();
     startPulseAnimation();
@@ -161,10 +158,10 @@ export default function App() {
     setTempName(settings.userName);
     setTempGoal(settings.scanGoal);
     setTempStats(settings.dashboardStats);
-    
+
     const premiumStatus = await PremiumService.isPremium();
     setIsPremium(premiumStatus);
-    
+
     const scans = await PremiumService.getTodayScans();
     setTodayScans(scans);
   };
@@ -226,7 +223,7 @@ export default function App() {
 
       const updatedHistory = [scanRecord, ...scanHistory].slice(0, 50);
       setScanHistory(updatedHistory);
-      
+
       await AsyncStorage.setItem('scanHistory', JSON.stringify(updatedHistory));
     } catch (error) {
       console.log('Error saving to history:', error);
@@ -235,9 +232,9 @@ export default function App() {
 
   const handleBarcodeScan = async (result) => {
     const barcode = result.data || result;
-    
+
     const scanCheck = await PremiumService.canScan();
-    
+
     if (!scanCheck.canScan) {
       setIsScanning(false);
       setScanMethod(null);
@@ -246,23 +243,23 @@ export default function App() {
       setShowUpgradeModal(true);
       return;
     }
-    
+
     setIsScanning(false);
     setScanMethod(null);
     setShowCameraScanner(false);
     console.log('Starting product fetch');
-    
+
     setTimeout(async () => {
       setIsLoading(true);
-      
+
       try {
         if (!isPremium) {
           const newCount = await PremiumService.incrementScanCounter();
           setTodayScans(newCount);
         }
-        
+
         const product = await ProductService.fetchProductByBarcode(barcode);
-        
+
         if (product) {
           if (userSettings.activeFilters && userSettings.activeFilters.length > 0) {
             const allergenWarnings = ProductService.checkUserAllergens(product, userSettings.activeFilters);
@@ -273,7 +270,7 @@ export default function App() {
               ];
             }
           }
-          
+
           product.barcode = barcode;
           setCurrentProduct(product);
           setShowResult(true);
@@ -309,11 +306,11 @@ export default function App() {
       console.log('⚠️ Old history item, re-fetching from API...');
       setActiveTab('home');
       setIsLoading(true);
-      
+
       setTimeout(async () => {
         try {
           const product = await ProductService.fetchProductByBarcode(item.barcode);
-          
+
           if (product) {
             product.barcode = item.barcode;
             setCurrentProduct(product);
@@ -363,12 +360,12 @@ export default function App() {
     );
   };
 
-  // ===== SPLASH SCREEN (EXISTING) =====
+  // ===== SPLASH SCREEN =====
   if (showSplash) {
     return <SplashScreen splashFadeAnim={splashFadeAnim} styles={{}} />;
   }
 
-  // ===== AUTH LOADING SCREEN (NEW) =====
+  // ===== AUTH LOADING SCREEN =====
   if (authLoading) {
     return (
       <View style={authStyles.loadingContainer}>
@@ -378,7 +375,7 @@ export default function App() {
     );
   }
 
-  // ===== SHOW AUTH SCREEN IF NOT LOGGED IN (NEW) =====
+  // ===== SHOW AUTH SCREEN IF NOT LOGGED IN =====
   if (!user) {
     return <AuthScreen />;
   }
@@ -390,14 +387,14 @@ export default function App() {
       <SafeAreaProvider>
         <SafeAreaView style={{ flex: 1 }}>
           <ImagePickerTest />
-          <TouchableOpacity 
-            style={{ 
-              position: 'absolute', 
-              top: 40, 
-              right: 20, 
-              backgroundColor: '#667EEA', 
-              padding: 10, 
-              borderRadius: 5 
+          <TouchableOpacity
+            style={{
+              position: 'absolute',
+              top: 40,
+              right: 20,
+              backgroundColor: '#667EEA',
+              padding: 10,
+              borderRadius: 5
             }}
             onPress={() => setTestMode(false)}
           >
@@ -416,7 +413,7 @@ export default function App() {
       >
         <View style={styles.loadingContent}>
           <View style={styles.loadingIconContainer}>
-            <Image 
+            <Image
               source={require('./assets/images/logo.png')}
               style={{ width: 50, height: 50, tintColor: '#FFFFFF' }}
               resizeMode="contain"
@@ -501,7 +498,7 @@ export default function App() {
           fadeAnim={fadeAnim}
           styles={styles}
         />
-        
+
         <UpgradeModal
           visible={showUpgradeModal}
           onClose={() => setShowUpgradeModal(false)}
@@ -520,7 +517,7 @@ export default function App() {
   );
 }
 
-// ===== AUTH LOADING STYLES (NEW) =====
+// ===== AUTH LOADING STYLES =====
 const authStyles = StyleSheet.create({
   loadingContainer: {
     flex: 1,

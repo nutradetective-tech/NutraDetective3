@@ -13,24 +13,19 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { auth } from '../config/firebase';
-import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  sendPasswordResetEmail,
-} from 'firebase/auth';
+import { supabase } from '../config/supabase'; // ✅ CHANGED: Import Supabase
 
 const AuthScreen = () => {
-  // State management
-  const [isSignUp, setIsSignUp] = useState(false); // Toggle between sign up/sign in
+  // State management (SAME AS BEFORE)
+  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // ===== SIGN UP FUNCTION =====
+  // ===== SIGN UP FUNCTION (UPDATED FOR SUPABASE) =====
   const handleSignUp = async () => {
-    // Validation checks
+    // Validation checks (SAME AS BEFORE)
     if (!email || !password || !confirmPassword) {
       Alert.alert('Error', 'Please fill in all fields');
       return;
@@ -49,43 +44,55 @@ const AuthScreen = () => {
     setLoading(true);
 
     try {
-      console.log('🔐 Creating new user account...');
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      console.log('✅ User created successfully!');
-      console.log('👤 User ID:', userCredential.user.uid);
+      console.log('🔷 Creating new user account...');
       
+      // ✅ SUPABASE: Sign up
+      const { data, error } = await supabase.auth.signUp({
+        email: email,
+        password: password,
+      });
+
+      if (error) throw error;
+
+      console.log('✅ User created successfully!');
+      console.log('👤 User ID:', data.user?.id);
+
       Alert.alert(
         'Success',
-        'Account created successfully!',
+        'Account created successfully! You can now sign in.',
         [{ text: 'OK' }]
       );
-      
-      // Firebase will automatically trigger auth state change in App.js
-      // No need to navigate manually
-      
+
+      // Auto-switch to sign in mode
+      setIsSignUp(false);
+      setPassword('');
+      setConfirmPassword('');
+
     } catch (error) {
-      console.error('❌ Sign up error:', error.code, error.message);
-      
+      console.error('❌ Sign up error:', error.message);
+
       // User-friendly error messages
       let errorMessage = 'Failed to create account';
-      
-      if (error.code === 'auth/email-already-in-use') {
+
+      if (error.message.includes('already registered')) {
         errorMessage = 'This email is already registered. Try signing in instead.';
-      } else if (error.code === 'auth/invalid-email') {
+      } else if (error.message.includes('Invalid email')) {
         errorMessage = 'Please enter a valid email address';
-      } else if (error.code === 'auth/weak-password') {
+      } else if (error.message.includes('Password')) {
         errorMessage = 'Password is too weak. Use at least 6 characters.';
+      } else {
+        errorMessage = error.message;
       }
-      
+
       Alert.alert('Sign Up Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // ===== SIGN IN FUNCTION =====
+  // ===== SIGN IN FUNCTION (UPDATED FOR SUPABASE) =====
   const handleSignIn = async () => {
-    // Validation checks
+    // Validation checks (SAME AS BEFORE)
     if (!email || !password) {
       Alert.alert('Error', 'Please enter email and password');
       return;
@@ -94,37 +101,43 @@ const AuthScreen = () => {
     setLoading(true);
 
     try {
-      console.log('🔐 Signing in user...');
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      console.log('🔷 Signing in user...');
+      
+      // ✅ SUPABASE: Sign in
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email,
+        password: password,
+      });
+
+      if (error) throw error;
+
       console.log('✅ Sign in successful!');
-      console.log('👤 User ID:', userCredential.user.uid);
-      
-      // Firebase will automatically trigger auth state change in App.js
+      console.log('👤 User ID:', data.user?.id);
+
+      // Supabase will automatically trigger auth state change in App.js
       // No need to navigate manually
-      
+
     } catch (error) {
-      console.error('❌ Sign in error:', error.code, error.message);
-      
+      console.error('❌ Sign in error:', error.message);
+
       // User-friendly error messages
       let errorMessage = 'Failed to sign in';
-      
-      if (error.code === 'auth/user-not-found') {
-        errorMessage = 'No account found with this email. Try signing up instead.';
-      } else if (error.code === 'auth/wrong-password') {
-        errorMessage = 'Incorrect password. Please try again.';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Please enter a valid email address';
-      } else if (error.code === 'auth/invalid-credential') {
+
+      if (error.message.includes('Invalid login credentials')) {
         errorMessage = 'Invalid email or password. Please check and try again.';
+      } else if (error.message.includes('Email not confirmed')) {
+        errorMessage = 'Please confirm your email address before signing in.';
+      } else {
+        errorMessage = error.message;
       }
-      
+
       Alert.alert('Sign In Failed', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // ===== FORGOT PASSWORD FUNCTION =====
+  // ===== FORGOT PASSWORD FUNCTION (UPDATED FOR SUPABASE) =====
   const handleForgotPassword = async () => {
     if (!email) {
       Alert.alert('Error', 'Please enter your email address first');
@@ -134,7 +147,13 @@ const AuthScreen = () => {
     setLoading(true);
 
     try {
-      await sendPasswordResetEmail(auth, email);
+      // ✅ SUPABASE: Reset password
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: 'nutradetective://reset-password', // Deep link for mobile
+      });
+
+      if (error) throw error;
+
       Alert.alert(
         'Success',
         'Password reset email sent! Check your inbox.',
@@ -142,28 +161,29 @@ const AuthScreen = () => {
       );
     } catch (error) {
       console.error('❌ Password reset error:', error);
-      
+
       let errorMessage = 'Failed to send password reset email';
-      
-      if (error.code === 'auth/user-not-found') {
+
+      if (error.message.includes('not found')) {
         errorMessage = 'No account found with this email';
-      } else if (error.code === 'auth/invalid-email') {
-        errorMessage = 'Please enter a valid email address';
+      } else {
+        errorMessage = error.message;
       }
-      
+
       Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // ===== TOGGLE BETWEEN SIGN UP AND SIGN IN =====
+  // ===== TOGGLE BETWEEN SIGN UP AND SIGN IN (SAME AS BEFORE) =====
   const toggleMode = () => {
     setIsSignUp(!isSignUp);
     setPassword('');
     setConfirmPassword('');
   };
 
+  // ===== UI (EXACTLY THE SAME AS BEFORE) =====
   return (
     <LinearGradient
       colors={['#667EEA', '#764BA2']}
@@ -283,6 +303,7 @@ const AuthScreen = () => {
   );
 };
 
+// ===== STYLES (EXACTLY THE SAME AS BEFORE) =====
 const styles = StyleSheet.create({
   container: {
     flex: 1,

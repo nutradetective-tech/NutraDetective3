@@ -19,15 +19,14 @@ import GoalEditModal from '../components/modals/GoalEditModal';
 import StatsSelectorModal from '../components/modals/StatsSelectorModal';
 import UserSettingsService from '../services/UserSettingsService';
 import PremiumService from '../services/PremiumService';
-import FirebaseStorageService from '../services/FirebaseStorageService';
+import SupabaseStorageService from '../services/SupabaseStorageService';
 import { calculateStreak } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
-// ===== NEW: Firebase Auth imports =====
-import { auth } from '../config/firebase';
-import { signOut } from 'firebase/auth';
+// ===== SUPABASE AUTH IMPORTS =====
+import { supabase } from '../config/supabase';
 
 const ProfileScreen = ({
-  user, // ===== NEW: User prop from App.js =====
+  user, // ===== User prop from App.js =====
   userSettings,
   setUserSettings,
   scanHistory,
@@ -112,24 +111,24 @@ const ProfileScreen = ({
     }
   };
 
-  // ===== UPDATED: Upload image to Firebase Storage with REAL USER ID =====
+ 
   const uploadProfilePicture = async (imageUri) => {
     setUploadingImage(true);
 
     try {
       // ✅ USE REAL USER ID from authenticated user
-      if (!user || !user.uid) {
+      if (!user || !user.id) {
         throw new Error('User not authenticated');
       }
 
-      const userId = user.uid; // ✅ Real Firebase user ID
+      const userId = user.id; // ✅ Supabase user ID
 
       console.log('📤 Uploading profile picture for user:', userId);
 
-      // Upload to Firebase
-      const downloadUrl = await FirebaseStorageService.uploadProfilePicture(
-        userId,    // ✅ Real user ID
-        imageUri   // ✅ Image URI
+      // Upload to Supabase Storage
+      const downloadUrl = await SupabaseStorageService.uploadProfilePicture(
+        userId,
+        imageUri
       );
 
       // Save URL to state and AsyncStorage
@@ -153,7 +152,7 @@ const ProfileScreen = ({
     }
   };
 
-  // ===== NEW: Sign Out Function =====
+  // ===== SIGN OUT FUNCTION (SUPABASE) =====
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -166,7 +165,8 @@ const ProfileScreen = ({
           onPress: async () => {
             try {
               console.log('🚪 Signing out user...');
-              await signOut(auth);
+              const { error } = await supabase.auth.signOut();
+              if (error) throw error;
               console.log('✅ User signed out successfully');
               // Auth state listener in App.js will automatically show AuthScreen
             } catch (error) {
@@ -240,7 +240,7 @@ const ProfileScreen = ({
             <Text style={styles.editNameText}>✏️ Edit Name</Text>
           </TouchableOpacity>
 
-          {/* ===== NEW: Display user email below name ===== */}
+          {/* ===== Display user email below name ===== */}
           {user && user.email && (
             <Text style={styles.userEmail}>{user.email}</Text>
           )}
@@ -356,7 +356,7 @@ const ProfileScreen = ({
             </LinearGradient>
           </TouchableOpacity>
 
-          {/* ===== NEW: Sign Out Button ===== */}
+          {/* ===== SIGN OUT BUTTON ===== */}
           <TouchableOpacity
             style={styles.signOutButton}
             onPress={handleSignOut}

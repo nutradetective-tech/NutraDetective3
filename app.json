@@ -2,7 +2,7 @@
   "expo": {
     "name": "NutraDetective",
     "slug": "NutraDetective3",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -30,7 +30,7 @@
     "backgroundColor": "#667EEA"
   },
   "package": "com.nutradetective.app",
-  "googleServicesFile": "./config/google-services.json",
+ 
   "versionCode": 1,
   "permissions": [
     "CAMERA",
