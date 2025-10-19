@@ -1,83 +1,153 @@
 // services/PremiumService.js
+// NutraDetective Premium Service - 3-Tier Subscription System
+// Version 2.0 - Free, Plus ($4.99), Pro ($9.99)
+
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// AsyncStorage Keys
 const PREMIUM_KEY = 'premiumStatus';
 const SCAN_COUNTER_KEY = 'scanCounter';
 
+// Subscription Tiers
+const TIERS = {
+  FREE: 'free',
+  PLUS: 'plus',
+  PRO: 'pro'
+};
+
+// Tier Limits
+const TIER_LIMITS = {
+  [TIERS.FREE]: {
+    scansPerDay: 7,
+    historyDays: 7,
+    features: ['Basic A-F grading', 'Top 8 allergens', '7-day history']
+  },
+  [TIERS.PLUS]: {
+    scansPerDay: 25,
+    historyDays: 30,
+    features: ['25 scans/day', 'ADHD additive alerts', '100+ allergen database', '30-day history', 'Alternative suggestions']
+  },
+  [TIERS.PRO]: {
+    scansPerDay: -1, // -1 = unlimited
+    historyDays: -1, // -1 = unlimited
+    features: ['Unlimited scans', 'Family sharing (5 accounts)', 'Unlimited history', 'Priority support', 'Store leaderboards']
+  }
+};
+
 /**
- * PremiumService - Manages premium subscription status and limits
+ * PremiumService - Manages 3-tier subscription system
+ * Free: 7 scans/day, 7-day history
+ * Plus ($4.99/mo): 25 scans/day, 30-day history, ADHD alerts
+ * Pro ($9.99/mo): Unlimited scans, unlimited history, family sharing
  */
 class PremiumService {
-  
+
+  // ===== TIER MANAGEMENT =====
+
   /**
-   * Check if user is a premium (Guardian) subscriber
-   * @returns {Promise<boolean>}
+   * Get user's current subscription tier
+   * @returns {Promise<string>} 'free', 'plus', or 'pro'
    */
-  static async isPremium() {
+  static async getTier() {
     try {
       const premiumData = await AsyncStorage.getItem(PREMIUM_KEY);
-      if (!premiumData) return false;
-      
+      if (!premiumData) return TIERS.FREE;
+
       const data = JSON.parse(premiumData);
-      
-      // Check if subscription is still active
+
+      // Check if subscription expired
       if (data.expiresAt) {
         const now = new Date().getTime();
         if (now > data.expiresAt) {
-          // Subscription expired
-          await this.setPremium(false);
-          return false;
+          console.log('⏰ Subscription expired, reverting to Free tier');
+          await this.setTier(TIERS.FREE);
+          return TIERS.FREE;
         }
       }
-      
-      return data.isPremium === true;
+
+      // Validate tier
+      if (!Object.values(TIERS).includes(data.tier)) {
+        console.log('⚠️ Invalid tier, defaulting to Free');
+        return TIERS.FREE;
+      }
+
+      return data.tier;
     } catch (error) {
-      console.error('Error checking premium status:', error);
-      return false;
+      console.error('❌ Error getting tier:', error);
+      return TIERS.FREE;
     }
   }
 
   /**
-   * Set premium status (for testing or after successful payment)
-   * @param {boolean} isPremium 
+   * Set user's subscription tier
+   * @param {string} tier - 'free', 'plus', or 'pro'
    * @param {number} expiresAt - Timestamp when subscription expires (optional)
+   * @returns {Promise<boolean>}
    */
-  static async setPremium(isPremium, expiresAt = null) {
+  static async setTier(tier, expiresAt = null) {
     try {
+      if (!Object.values(TIERS).includes(tier)) {
+        console.error('❌ Invalid tier:', tier);
+        return false;
+      }
+
       const data = {
-        isPremium,
+        tier,
         expiresAt,
         updatedAt: new Date().getTime()
       };
+
       await AsyncStorage.setItem(PREMIUM_KEY, JSON.stringify(data));
+      console.log(`✅ Tier set to: ${tier.toUpperCase()}`);
       return true;
     } catch (error) {
-      console.error('Error setting premium status:', error);
+      console.error('❌ Error setting tier:', error);
       return false;
     }
   }
 
   /**
-   * Get today's scan count for free users
+   * Check if user has premium access (Plus or Pro)
+   * @returns {Promise<boolean>}
+   */
+  static async isPremium() {
+    const tier = await this.getTier();
+    return tier === TIERS.PLUS || tier === TIERS.PRO;
+  }
+
+  /**
+   * Check if user is on specific tier
+   * @param {string} tierToCheck - 'free', 'plus', or 'pro'
+   * @returns {Promise<boolean>}
+   */
+  static async isTier(tierToCheck) {
+    const currentTier = await this.getTier();
+    return currentTier === tierToCheck;
+  }
+
+  // ===== SCAN LIMITING =====
+
+  /**
+   * Get today's scan count
    * @returns {Promise<number>}
    */
   static async getTodayScans() {
     try {
       const counterData = await AsyncStorage.getItem(SCAN_COUNTER_KEY);
       if (!counterData) return 0;
-      
+
       const data = JSON.parse(counterData);
       const today = new Date().toDateString();
-      
+
       // Reset counter if it's a new day
       if (data.date !== today) {
         await this.resetScanCounter();
         return 0;
       }
-      
+
       return data.count || 0;
     } catch (error) {
-      console.error('Error getting scan count:', error);
+      console.error('❌ Error getting scan count:', error);
       return 0;
     }
   }
@@ -90,16 +160,18 @@ class PremiumService {
     try {
       const currentCount = await this.getTodayScans();
       const today = new Date().toDateString();
-      
+
       const data = {
         count: currentCount + 1,
-        date: today
+        date: today,
+        lastScanAt: new Date().getTime()
       };
-      
+
       await AsyncStorage.setItem(SCAN_COUNTER_KEY, JSON.stringify(data));
+      console.log(`📊 Scan count incremented: ${data.count}`);
       return data.count;
     } catch (error) {
-      console.error('Error incrementing scan counter:', error);
+      console.error('❌ Error incrementing scan counter:', error);
       return 0;
     }
   }
@@ -112,114 +184,288 @@ class PremiumService {
       const today = new Date().toDateString();
       const data = {
         count: 0,
-        date: today
+        date: today,
+        resetAt: new Date().getTime()
       };
       await AsyncStorage.setItem(SCAN_COUNTER_KEY, JSON.stringify(data));
+      console.log('🔄 Scan counter reset for new day');
     } catch (error) {
-      console.error('Error resetting scan counter:', error);
+      console.error('❌ Error resetting scan counter:', error);
     }
   }
 
   /**
-   * Check if user can scan (for free users with daily limit)
-   * @returns {Promise<{canScan: boolean, scansRemaining: number, message: string}>}
+   * Check if user can scan based on their tier
+   * @returns {Promise<{canScan: boolean, scansRemaining: number, tier: string, message: string}>}
    */
   static async canScan() {
-    const isPremium = await this.isPremium();
-    
-    // Premium users have unlimited scans
-    if (isPremium) {
+    const tier = await this.getTier();
+    const limits = TIER_LIMITS[tier];
+    const todayScans = await this.getTodayScans();
+
+    // Pro tier: Unlimited scans
+    if (tier === TIERS.PRO) {
       return {
         canScan: true,
-        scansRemaining: -1, // -1 means unlimited
-        message: 'Unlimited scans'
+        scansRemaining: -1, // -1 = unlimited
+        tier: TIERS.PRO,
+        message: '✨ Unlimited scans (Pro)'
       };
     }
-    
-    // Free users have 7 scans per day
-    const FREE_DAILY_LIMIT = 7;
-    const todayScans = await this.getTodayScans();
-    const remaining = FREE_DAILY_LIMIT - todayScans;
-    
+
+    // Plus tier: 25 scans/day
+    if (tier === TIERS.PLUS) {
+      const remaining = limits.scansPerDay - todayScans;
+      
+      if (remaining <= 0) {
+        return {
+          canScan: false,
+          scansRemaining: 0,
+          tier: TIERS.PLUS,
+          message: 'Daily scan limit reached (25/25). Upgrade to Pro for unlimited scans!'
+        };
+      }
+
+      return {
+        canScan: true,
+        scansRemaining: remaining,
+        tier: TIERS.PLUS,
+        message: `${remaining} scans remaining today (Plus)`
+      };
+    }
+
+    // Free tier: 5 scans/day
+    const remaining = limits.scansPerDay - todayScans;
+
     if (remaining <= 0) {
       return {
         canScan: false,
         scansRemaining: 0,
-        message: 'Daily scan limit reached. Upgrade to Guardian for unlimited scans!'
+        tier: TIERS.FREE,
+        message: 'Daily scan limit reached (5/5). Upgrade to Plus for 25 scans/day or Pro for unlimited!'
       };
     }
-    
+
+    // Warning when close to limit
+    let message = `${remaining} scans remaining today`;
+    if (remaining <= 2) {
+      message += ' - Consider upgrading to Plus or Pro!';
+    }
+
     return {
       canScan: true,
       scansRemaining: remaining,
-      message: `${remaining} scans remaining today`
+      tier: TIERS.FREE,
+      message
     };
   }
 
+  // ===== HISTORY FILTERING =====
+
   /**
-   * Filter scan history based on premium status
-   * Free users: Only last 30 days
-   * Premium users: All history
+   * Filter scan history based on tier limits
+   * Free: 7 days, Plus: 30 days, Pro: Unlimited
    * @param {Array} history - Full scan history array
    * @returns {Promise<Array>} Filtered history
    */
   static async filterHistory(history) {
-    const isPremium = await this.isPremium();
-    
-    // Premium users see all history
-    if (isPremium) {
+    const tier = await this.getTier();
+    const limits = TIER_LIMITS[tier];
+
+    // Pro tier: Unlimited history
+    if (limits.historyDays === -1) {
       return history;
     }
-    
-    // Free users only see last 30 days
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-    const cutoffTime = thirtyDaysAgo.getTime();
-    
-    return history.filter(scan => {
+
+    // Filter by days limit
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - limits.historyDays);
+    const cutoffTime = cutoffDate.getTime();
+
+    const filtered = history.filter(scan => {
       const scanDate = new Date(scan.date).getTime();
       return scanDate >= cutoffTime;
     });
+
+    console.log(`📊 History filtered: ${filtered.length}/${history.length} scans (${tier} - ${limits.historyDays} days)`);
+    return filtered;
+  }
+
+  // ===== FEATURE ACCESS =====
+
+  /**
+   * Check if user has access to ADHD additive alerts (Plus/Pro only)
+   * @returns {Promise<boolean>}
+   */
+  static async hasAdhdAlerts() {
+    const tier = await this.getTier();
+    return tier === TIERS.PLUS || tier === TIERS.PRO;
   }
 
   /**
-   * Get premium status summary for UI display
+   * Check if user has access to advanced allergen database (Plus/Pro only)
+   * @returns {Promise<boolean>}
+   */
+  static async hasAdvancedAllergens() {
+    const tier = await this.getTier();
+    return tier === TIERS.PLUS || tier === TIERS.PRO;
+  }
+
+  /**
+   * Check if user has access to family sharing (Pro only)
+   * @returns {Promise<boolean>}
+   */
+  static async hasFamilySharing() {
+    const tier = await this.getTier();
+    return tier === TIERS.PRO;
+  }
+
+  /**
+   * Get all features available to user's tier
+   * @returns {Promise<Array<string>>}
+   */
+  static async getAvailableFeatures() {
+    const tier = await this.getTier();
+    return TIER_LIMITS[tier].features;
+  }
+
+  // ===== STATUS SUMMARY =====
+
+  /**
+   * Get complete premium status for UI display
    * @returns {Promise<object>}
    */
-  static async getPremiumStatus() {
-    const isPremium = await this.isPremium();
+  static async getStatus() {
+    const tier = await this.getTier();
     const todayScans = await this.getTodayScans();
-    const scanLimit = await this.canScan();
-    
+    const scanCheck = await this.canScan();
+    const limits = TIER_LIMITS[tier];
+
     return {
-      isPremium,
-      tier: isPremium ? 'Guardian' : 'Seeker',
+      // Tier info
+      tier,
+      tierName: tier.charAt(0).toUpperCase() + tier.slice(1),
+      isPremium: tier === TIERS.PLUS || tier === TIERS.PRO,
+      isPro: tier === TIERS.PRO,
+      isPlus: tier === TIERS.PLUS,
+      isFree: tier === TIERS.FREE,
+
+      // Scan limits
       todayScans,
-      scansRemaining: scanLimit.scansRemaining,
-      canScan: scanLimit.canScan,
-      message: scanLimit.message
+      scansRemaining: scanCheck.scansRemaining,
+      scanLimit: limits.scansPerDay,
+      canScan: scanCheck.canScan,
+      message: scanCheck.message,
+
+      // History limits
+      historyDays: limits.historyDays,
+      hasUnlimitedHistory: limits.historyDays === -1,
+
+      // Feature access
+      hasAdhdAlerts: tier === TIERS.PLUS || tier === TIERS.PRO,
+      hasAdvancedAllergens: tier === TIERS.PLUS || tier === TIERS.PRO,
+      hasFamilySharing: tier === TIERS.PRO,
+      features: limits.features
     };
   }
 
+  // ===== TESTING FUNCTIONS =====
+
   /**
-   * FOR TESTING: Activate premium for 30 days
+   * FOR TESTING: Set tier to Free
    */
-  static async activateTestPremium() {
-    const thirtyDaysFromNow = new Date();
-    thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-    await this.setPremium(true, thirtyDaysFromNow.getTime());
-    console.log('✅ Test premium activated for 30 days');
-    return true;
+  static async setTestFree() {
+    await this.setTier(TIERS.FREE);
+    await this.resetScanCounter();
+    console.log('🆓 Test tier set to FREE (5 scans/day, 7-day history)');
+    return await this.getStatus();
   }
 
   /**
-   * FOR TESTING: Deactivate premium
+   * FOR TESTING: Set tier to Plus ($4.99/mo)
    */
-  static async deactivateTestPremium() {
-    await this.setPremium(false);
-    console.log('❌ Premium deactivated');
-    return true;
+  static async setTestPlus(daysValid = 30) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + daysValid);
+    await this.setTier(TIERS.PLUS, expiresAt.getTime());
+    await this.resetScanCounter();
+    console.log(`✨ Test tier set to PLUS (25 scans/day, 30-day history, ${daysValid} days)`);
+    return await this.getStatus();
+  }
+
+  /**
+   * FOR TESTING: Set tier to Pro ($9.99/mo)
+   */
+  static async setTestPro(daysValid = 30) {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + daysValid);
+    await this.setTier(TIERS.PRO, expiresAt.getTime());
+    await this.resetScanCounter();
+    console.log(`🚀 Test tier set to PRO (unlimited scans, unlimited history, ${daysValid} days)`);
+    return await this.getStatus();
+  }
+
+  /**
+   * FOR TESTING: Add scans to counter (to test limits)
+   */
+  static async addTestScans(count) {
+    try {
+      const today = new Date().toDateString();
+      const currentCount = await this.getTodayScans();
+      
+      const data = {
+        count: currentCount + count,
+        date: today,
+        lastScanAt: new Date().getTime()
+      };
+
+      await AsyncStorage.setItem(SCAN_COUNTER_KEY, JSON.stringify(data));
+      console.log(`📊 Added ${count} test scans (total: ${data.count})`);
+      return data.count;
+    } catch (error) {
+      console.error('❌ Error adding test scans:', error);
+      return 0;
+    }
+  }
+
+  /**
+   * FOR TESTING: Clear all premium data
+   */
+  static async clearAll() {
+    try {
+      await AsyncStorage.removeItem(PREMIUM_KEY);
+      await AsyncStorage.removeItem(SCAN_COUNTER_KEY);
+      console.log('🧹 All premium data cleared');
+      return true;
+    } catch (error) {
+      console.error('❌ Error clearing data:', error);
+      return false;
+    }
+  }
+
+  /**
+   * FOR TESTING: Log current status to console
+   */
+  static async logStatus() {
+    const status = await this.getStatus();
+    console.log('═══════════════════════════════════════');
+    console.log('📊 NUTRADETECTIVE PREMIUM STATUS');
+    console.log('═══════════════════════════════════════');
+    console.log(`Tier: ${status.tierName.toUpperCase()}`);
+    console.log(`Today's Scans: ${status.todayScans}${status.scanLimit === -1 ? ' (unlimited)' : `/${status.scanLimit}`}`);
+    console.log(`Scans Remaining: ${status.scansRemaining === -1 ? 'Unlimited' : status.scansRemaining}`);
+    console.log(`Can Scan: ${status.canScan ? '✅ YES' : '❌ NO'}`);
+    console.log(`History Days: ${status.historyDays === -1 ? 'Unlimited' : `${status.historyDays} days`}`);
+    console.log(`ADHD Alerts: ${status.hasAdhdAlerts ? '✅' : '❌'}`);
+    console.log(`Advanced Allergens: ${status.hasAdvancedAllergens ? '✅' : '❌'}`);
+    console.log(`Family Sharing: ${status.hasFamilySharing ? '✅' : '❌'}`);
+    console.log('═══════════════════════════════════════');
+    console.log(`Message: ${status.message}`);
+    console.log('═══════════════════════════════════════');
+    return status;
   }
 }
 
+// Export tier constants for use in other files
+export { TIERS, TIER_LIMITS };
 export default PremiumService;

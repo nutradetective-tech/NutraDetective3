@@ -49,10 +49,28 @@ const ProfileScreen = ({
   const [profilePictureUri, setProfilePictureUri] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
+  // ===== NEW: Tier testing state =====
+  const [currentTier, setCurrentTier] = useState('free');
+  const [todayScans, setTodayScans] = useState(0);
+  const [scanLimit, setScanLimit] = useState(7);
+
   // Load profile picture on component mount
   useEffect(() => {
     loadProfilePicture();
+    loadTierStatus(); // ===== NEW: Load tier status =====
   }, []);
+
+  // ===== NEW: Load tier status =====
+  const loadTierStatus = async () => {
+    try {
+      const status = await PremiumService.getStatus();
+      setCurrentTier(status.tier);
+      setTodayScans(status.todayScans);
+      setScanLimit(status.scanLimit);
+    } catch (error) {
+      console.error('Error loading tier status:', error);
+    }
+  };
 
   // Load saved profile picture from AsyncStorage
   const loadProfilePicture = async () => {
@@ -111,7 +129,7 @@ const ProfileScreen = ({
     }
   };
 
- 
+
   const uploadProfilePicture = async (imageUri) => {
     setUploadingImage(true);
 
@@ -149,6 +167,76 @@ const ProfileScreen = ({
       );
     } finally {
       setUploadingImage(false);
+    }
+  };
+
+  // ===== NEW: Tier testing handlers =====
+  const switchToFree = async () => {
+    try {
+      await PremiumService.setTestFree();
+      await loadTierStatus();
+      Alert.alert(
+        '🆓 Switched to Free',
+        '7 scans/day\n7-day history',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to switch tier');
+    }
+  };
+
+  const switchToPlus = async () => {
+    try {
+      await PremiumService.setTestPlus();
+      await loadTierStatus();
+      Alert.alert(
+        '⭐ Switched to Plus',
+        '25 scans/day\n30-day history\nADHD alerts enabled',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to switch tier');
+    }
+  };
+
+  const switchToPro = async () => {
+    try {
+      await PremiumService.setTestPro();
+      await loadTierStatus();
+      Alert.alert(
+        '👑 Switched to Pro',
+        'Unlimited scans\nUnlimited history\nFamily sharing\nAll features',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to switch tier');
+    }
+  };
+
+  const resetScans = async () => {
+    try {
+      await PremiumService.resetScanCounter();
+      await loadTierStatus();
+      Alert.alert(
+        '🔄 Scans Reset',
+        'Scan counter has been reset to 0',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to reset scans');
+    }
+  };
+
+  const showStatus = async () => {
+    try {
+      await PremiumService.logStatus();
+      Alert.alert(
+        '📊 Status Logged',
+        'Check the console for detailed status information',
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      Alert.alert('Error', 'Failed to get status');
     }
   };
 
@@ -342,6 +430,82 @@ const ProfileScreen = ({
             </TouchableOpacity>
           </View>
 
+          {/* ===== NEW: DEVELOPER TESTING SECTION ===== */}
+          <View style={testingStyles.testingSection}>
+            <Text style={styles.sectionTitle}>🧪 Developer Testing</Text>
+            
+            <View style={testingStyles.statusCard}>
+              <View style={testingStyles.statusRow}>
+                <Text style={testingStyles.statusLabel}>Current Tier:</Text>
+                <Text style={testingStyles.statusValue}>
+                  {currentTier === 'free' && '🆓 FREE'}
+                  {currentTier === 'plus' && '⭐ PLUS'}
+                  {currentTier === 'pro' && '👑 PRO'}
+                </Text>
+              </View>
+              <View style={testingStyles.statusRow}>
+                <Text style={testingStyles.statusLabel}>Today's Scans:</Text>
+                <Text style={testingStyles.statusValue}>
+                  {todayScans}/{scanLimit === -1 ? '∞' : scanLimit}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={testingStyles.buttonGroupLabel}>Switch Tier:</Text>
+            <View style={testingStyles.tierButtonsRow}>
+              <TouchableOpacity
+                style={[
+                  testingStyles.tierButton,
+                  currentTier === 'free' && testingStyles.tierButtonActive
+                ]}
+                onPress={switchToFree}
+              >
+                <Text style={testingStyles.tierButtonIcon}>🆓</Text>
+                <Text style={testingStyles.tierButtonText}>Free</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  testingStyles.tierButton,
+                  currentTier === 'plus' && testingStyles.tierButtonActive
+                ]}
+                onPress={switchToPlus}
+              >
+                <Text style={testingStyles.tierButtonIcon}>⭐</Text>
+                <Text style={testingStyles.tierButtonText}>Plus</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  testingStyles.tierButton,
+                  currentTier === 'pro' && testingStyles.tierButtonActive
+                ]}
+                onPress={switchToPro}
+              >
+                <Text style={testingStyles.tierButtonIcon}>👑</Text>
+                <Text style={testingStyles.tierButtonText}>Pro</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={testingStyles.actionButtonsRow}>
+              <TouchableOpacity
+                style={testingStyles.actionButton}
+                onPress={resetScans}
+              >
+                <Text style={testingStyles.actionButtonIcon}>🔄</Text>
+                <Text style={testingStyles.actionButtonText}>Reset</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={testingStyles.actionButton}
+                onPress={showStatus}
+              >
+                <Text style={testingStyles.actionButtonIcon}>📊</Text>
+                <Text style={testingStyles.actionButtonText}>Status</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <TouchableOpacity style={styles.premiumButtonWrapper}>
             <LinearGradient
               colors={['#FBBF24', '#F59E0B']}
@@ -437,5 +601,95 @@ const ProfileScreen = ({
     </SafeAreaView>
   );
 };
+
+// ===== NEW: Testing styles =====
+const testingStyles = StyleSheet.create({
+  testingSection: {
+    backgroundColor: '#F0F9FF',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: '#667EEA',
+  },
+  statusCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 16,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  statusLabel: {
+    fontSize: 14,
+    color: '#6B7280',
+    fontWeight: '500',
+  },
+  statusValue: {
+    fontSize: 16,
+    color: '#1F2937',
+    fontWeight: 'bold',
+  },
+  buttonGroupLabel: {
+    fontSize: 14,
+    color: '#4B5563',
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  tierButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  tierButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  tierButtonActive: {
+    borderColor: '#667EEA',
+    backgroundColor: '#EEF2FF',
+  },
+  tierButtonIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  tierButtonText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  actionButton: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  actionButtonIcon: {
+    fontSize: 20,
+    marginBottom: 4,
+  },
+  actionButtonText: {
+    fontSize: 12,
+    color: '#4B5563',
+    fontWeight: '600',
+  },
+});
 
 export default ProfileScreen;
