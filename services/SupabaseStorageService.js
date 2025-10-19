@@ -1,19 +1,18 @@
 // services/SupabaseStorageService.js
 // Supabase Storage Service for NutraDetective
+// WORKING FIX: Uses FormData for file upload (React Native compatible)
 
 import { supabase, STORAGE_BUCKET } from '../config/supabase';
-import * as FileSystem from 'expo-file-system';
 
 class SupabaseStorageService {
 
   // ===== CONNECTION TEST =====
   static async testConnection() {
     try {
-      console.log('🔷 Testing Supabase Storage connection...');
+      console.log('📷 Testing Supabase Storage connection...');
 
-      // List buckets to verify connection
       const { data, error } = await supabase.storage.listBuckets();
-      
+
       if (error) {
         console.error('❌ Supabase Storage connection failed:', error);
         return false;
@@ -21,7 +20,7 @@ class SupabaseStorageService {
 
       console.log('✅ Supabase Storage connected successfully!');
       console.log('📦 Available buckets:', data?.map(b => b.name).join(', '));
-      
+
       return true;
     } catch (error) {
       console.error('❌ Supabase Storage connection error:', error);
@@ -51,15 +50,19 @@ class SupabaseStorageService {
         throw new Error('Invalid imageUri parameter');
       }
 
-      // Read file as base64
-      console.log('📖 Reading file...');
-      const base64 = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
+      // Create FormData (React Native compatible)
+      console.log('📦 Creating FormData...');
+      const formData = new FormData();
+      
+      // Add file to FormData
+      // React Native automatically handles local file URIs
+      formData.append('file', {
+        uri: imageUri,
+        type: 'image/jpeg',
+        name: 'profile.jpg',
       });
 
-      // Convert base64 to blob
-      const blob = this.base64ToBlob(base64, 'image/jpeg');
-      console.log('✅ Converted to Blob, size:', blob.size, 'bytes');
+      console.log('✅ FormData created');
 
       // Create unique filename
       const filename = `profile-${Date.now()}.jpg`;
@@ -67,18 +70,27 @@ class SupabaseStorageService {
 
       console.log('📦 Uploading to path:', filePath);
 
-      // Upload to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from(STORAGE_BUCKET)
-        .upload(filePath, blob, {
-          contentType: 'image/jpeg',
-          cacheControl: '3600',
-          upsert: true, // Replace if exists
-        });
+      // Get Supabase auth token
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
 
-      if (error) {
-        console.error('❌ Upload error:', error);
-        throw error;
+      // Upload using fetch with FormData
+      const uploadUrl = `https://yimmcoegsjxfyhbcblig.supabase.co/storage/v1/object/${STORAGE_BUCKET}/${filePath}`;
+      
+      const uploadResponse = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        const errorText = await uploadResponse.text();
+        console.error('❌ Upload failed:', errorText);
+        throw new Error(`Upload failed: ${uploadResponse.status} ${errorText}`);
       }
 
       console.log('✅ Upload complete!');
@@ -98,38 +110,12 @@ class SupabaseStorageService {
   }
 
   /**
-   * Convert base64 string to Blob
-   * @param {string} base64 - Base64 string
-   * @param {string} contentType - MIME type
-   * @returns {Blob}
-   */
-  static base64ToBlob(base64, contentType = '') {
-    const byteCharacters = atob(base64);
-    const byteArrays = [];
-
-    for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-      const slice = byteCharacters.slice(offset, offset + 512);
-      const byteNumbers = new Array(slice.length);
-      
-      for (let i = 0; i < slice.length; i++) {
-        byteNumbers[i] = slice.charCodeAt(i);
-      }
-      
-      const byteArray = new Uint8Array(byteNumbers);
-      byteArrays.push(byteArray);
-    }
-
-    return new Blob(byteArrays, { type: contentType });
-  }
-
-  /**
    * Delete user profile picture
    * @param {string} userId - User ID
    * @returns {Promise<boolean>}
    */
   static async deleteProfilePicture(userId) {
     try {
-      // List all files for user
       const { data: files, error: listError } = await supabase.storage
         .from(STORAGE_BUCKET)
         .list(userId);
@@ -141,7 +127,6 @@ class SupabaseStorageService {
         return true;
       }
 
-      // Delete all profile pictures for this user
       const filePaths = files.map(file => `${userId}/${file.name}`);
       const { error: deleteError } = await supabase.storage
         .from(STORAGE_BUCKET)
@@ -164,7 +149,6 @@ class SupabaseStorageService {
    */
   static async getProfilePicture(userId) {
     try {
-      // List files for user
       const { data: files, error } = await supabase.storage
         .from(STORAGE_BUCKET)
         .list(userId);
@@ -173,14 +157,12 @@ class SupabaseStorageService {
         return null;
       }
 
-      // Get the most recent profile picture
       const latestFile = files
         .filter(f => f.name.startsWith('profile-'))
         .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
 
       if (!latestFile) return null;
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from(STORAGE_BUCKET)
         .getPublicUrl(`${userId}/${latestFile.name}`);
