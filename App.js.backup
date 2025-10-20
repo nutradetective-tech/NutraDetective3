@@ -90,19 +90,7 @@ export default function App() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const splashFadeAnim = useRef(new Animated.Value(0)).current;
 
-// ===== SUPABASE AUTH STATE LISTENER =====
-  // 🔥 TEMPORARILY DISABLED FOR RAPID DEV TESTING
-  useEffect(() => {
-    console.log('🔥 DEV MODE: Auth bypassed, auto-logged in');
-    // Force logged-in state for testing
-    setUser({ 
-      id: 'dev-user-123',
-      email: 'dev@test.com' 
-    });
-    setAuthLoading(false);
-  }, []);
-
-  /* COMMENTED OUT FOR DEV MODE - RESTORE BEFORE PRODUCTION BUILD
+  // ===== SUPABASE AUTH STATE LISTENER =====
   useEffect(() => {
     console.log('🔷 Setting up Supabase Auth listener...');
 
@@ -138,7 +126,6 @@ export default function App() {
       subscription.unsubscribe();
     };
   }, []);
-  */
 
 useEffect(() => {
 
@@ -389,12 +376,9 @@ useEffect(() => {
   }
 
   // ===== SHOW AUTH SCREEN IF NOT LOGGED IN =====
-  // 🔥 TEMPORARILY DISABLED FOR RAPID DEV TESTING
-  /* COMMENTED OUT FOR DEV MODE - RESTORE BEFORE PRODUCTION BUILD
   if (!user) {
     return <AuthScreen />;
   }
-  */
 
   // ===== REST OF APP (ONLY SHOWS WHEN LOGGED IN) =====
 

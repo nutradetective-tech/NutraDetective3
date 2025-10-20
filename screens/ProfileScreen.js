@@ -22,6 +22,8 @@ import PremiumService from '../services/PremiumService';
 import SupabaseStorageService from '../services/SupabaseStorageService';
 import { calculateStreak } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
+import BottomNav from '../components/BottomNav';  // ← ADD THIS IMPORT
+import ScreenContainer from '../components/ScreenContainer';
 // ===== SUPABASE AUTH IMPORTS =====
 import { supabase } from '../config/supabase';
 
@@ -277,328 +279,297 @@ const ProfileScreen = ({
     </View>
   );
 
-  return (
-    <SafeAreaView style={styles.container}>
+return (
+    <ScreenContainer activeTab="profile" setActiveTab={setActiveTab}>
       <StatusBar barStyle="light-content" />
 
-      <ResponsiveContainer>
-        <LinearGradient
-          colors={['#667EEA', '#764BA2']}
-          style={styles.profileHeader}
+      <LinearGradient
+        colors={['#667EEA', '#764BA2']}
+        style={styles.profileHeader}
+      >
+        <Text style={styles.profileHeaderTitle}>Profile</Text>
+
+        {/* Avatar with profile picture */}
+        <TouchableOpacity
+          onPress={pickProfileImage}
+          disabled={uploadingImage}
+          activeOpacity={0.8}
         >
-          <Text style={styles.profileHeaderTitle}>Profile</Text>
-
-          {/* Avatar with profile picture */}
-          <TouchableOpacity
-            onPress={pickProfileImage}
-            disabled={uploadingImage}
-            activeOpacity={0.8}
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
+            style={styles.profileAvatarLarge}
           >
-            <LinearGradient
-              colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
-              style={styles.profileAvatarLarge}
-            >
-              {uploadingImage ? (
-                <ActivityIndicator size="large" color="#FFF" />
-              ) : profilePictureUri ? (
-                <Image
-                  source={{ uri: profilePictureUri }}
-                  style={styles.profileImage}
-                />
-              ) : (
-                <Text style={styles.profileAvatarIcon}>
-                  {userSettings.profileInitials}
-                </Text>
-              )}
-            </LinearGradient>
-
-            {/* Camera icon badge */}
-            {!uploadingImage && (
-              <View style={styles.cameraIconBadge}>
-                <Text style={styles.cameraIconText}>📷</Text>
-              </View>
-            )}
-          </TouchableOpacity>
-
-          <Text style={styles.profileNameWhite}>{userSettings.userName}</Text>
-          <TouchableOpacity
-            onPress={() => setShowNameEditModal(true)}
-            style={styles.editNameButton}
-          >
-            <Text style={styles.editNameText}>✏️ Edit Name</Text>
-          </TouchableOpacity>
-
-          {/* ===== Display user email below name ===== */}
-          {user && user.email && (
-            <Text style={styles.userEmail}>{user.email}</Text>
-          )}
-        </LinearGradient>
-
-        <ScrollView style={styles.profileContent}>
-          <View style={[styles.profileStats, styles.cardShadow]}>
-            <View style={styles.profileStatItem}>
-              <Text style={styles.profileStatValue}>{scanHistory.length}</Text>
-              <Text style={styles.profileStatLabel}>Total Scans</Text>
-            </View>
-            <View style={styles.profileStatDivider} />
-            <View style={styles.profileStatItem}>
-              <Text style={styles.profileStatValue}>
-                {Math.round((scanHistory.filter(item => item.score >= 70).length / (scanHistory.length || 1)) * 100)}%
+            {uploadingImage ? (
+              <ActivityIndicator size="large" color="#FFF" />
+            ) : profilePictureUri ? (
+              <Image
+                source={{ uri: profilePictureUri }}
+                style={styles.profileImage}
+              />
+            ) : (
+              <Text style={styles.profileAvatarIcon}>
+                {userSettings.profileInitials}
               </Text>
-              <Text style={styles.profileStatLabel}>Healthy</Text>
+            )}
+          </LinearGradient>
+
+          {/* Camera icon badge */}
+          {!uploadingImage && (
+            <View style={styles.cameraIconBadge}>
+              <Text style={styles.cameraIconText}>📷</Text>
             </View>
-            <View style={styles.profileStatDivider} />
-            <View style={styles.profileStatItem}>
-              <Text style={styles.profileStatValue}>{calculateStreak(scanHistory)}</Text>
-              <Text style={styles.profileStatLabel}>Day Streak</Text>
-            </View>
+          )}
+        </TouchableOpacity>
+
+        <Text style={styles.profileNameWhite}>{userSettings.userName}</Text>
+        <TouchableOpacity
+          onPress={() => setShowNameEditModal(true)}
+          style={styles.editNameButton}
+        >
+          <Text style={styles.editNameText}>✏️ Edit Name</Text>
+        </TouchableOpacity>
+
+        {/* Display user email below name */}
+        {user && user.email && (
+          <Text style={styles.userEmail}>{user.email}</Text>
+        )}
+      </LinearGradient>
+
+      <View style={[styles.profileStats, styles.cardShadow]}>
+        <View style={styles.profileStatItem}>
+          <Text style={styles.profileStatValue}>{scanHistory.length}</Text>
+          <Text style={styles.profileStatLabel}>Total Scans</Text>
+        </View>
+        <View style={styles.profileStatDivider} />
+        <View style={styles.profileStatItem}>
+          <Text style={styles.profileStatValue}>
+            {Math.round((scanHistory.filter(item => item.score >= 70).length / (scanHistory.length || 1)) * 100)}%
+          </Text>
+          <Text style={styles.profileStatLabel}>Healthy</Text>
+        </View>
+        <View style={styles.profileStatDivider} />
+        <View style={styles.profileStatItem}>
+          <Text style={styles.profileStatValue}>{calculateStreak(scanHistory)}</Text>
+          <Text style={styles.profileStatLabel}>Day Streak</Text>
+        </View>
+      </View>
+
+      <View style={styles.settingsSection}>
+        <Text style={styles.sectionTitle}>Personalization</Text>
+
+        <TouchableOpacity
+          style={[styles.settingItem, {
+            backgroundColor: '#FEF2F2',
+            borderWidth: 2,
+            borderColor: '#8B5CF6',
+            marginBottom: 12
+          }]}
+          onPress={async () => {
+            try {
+              const currentStatus = await PremiumService.isPremium();
+
+              if (currentStatus) {
+                await PremiumService.deactivateTestPremium();
+                Alert.alert(
+                  '✅ Premium Deactivated',
+                  'You are now on the free Seeker tier (7 scans/day).',
+                  [{ text: 'OK' }]
+                );
+              } else {
+                await PremiumService.activateTestPremium();
+                Alert.alert(
+                  '🎉 Guardian Activated!',
+                  'You now have Guardian tier for 30 days!\n\n✅ Unlimited scans\n✅ Unlimited history\n✅ No ads (coming soon)',
+                  [{ text: 'Awesome!' }]
+                );
+              }
+            } catch (error) {
+              console.error('Premium toggle error:', error);
+              Alert.alert('Error', 'Could not toggle premium status. Check console.');
+            }
+          }}
+        >
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>👑</Text>
+            <Text style={styles.settingLabel}>Premium Status (TEST)</Text>
           </View>
-
-          <View style={styles.settingsSection}>
-            <Text style={styles.sectionTitle}>Personalization</Text>
-
-            <TouchableOpacity
-              style={[styles.settingItem, {
-                backgroundColor: '#FEF2F2',
-                borderWidth: 2,
-                borderColor: '#8B5CF6',
-                marginBottom: 12
-              }]}
-              onPress={async () => {
-                try {
-                  const currentStatus = await PremiumService.isPremium();
-
-                  if (currentStatus) {
-                    await PremiumService.deactivateTestPremium();
-                    Alert.alert(
-                      '✅ Premium Deactivated',
-                      'You are now on the free Seeker tier (7 scans/day).',
-                      [{ text: 'OK' }]
-                    );
-                  } else {
-                    await PremiumService.activateTestPremium();
-                    Alert.alert(
-                      '🎉 Guardian Activated!',
-                      'You now have Guardian tier for 30 days!\n\n✅ Unlimited scans\n✅ Unlimited history\n✅ No ads (coming soon)',
-                      [{ text: 'Awesome!' }]
-                    );
-                  }
-                } catch (error) {
-                  console.error('Premium toggle error:', error);
-                  Alert.alert('Error', 'Could not toggle premium status. Check console.');
-                }
-              }}
-            >
-              <View style={styles.settingLeft}>
-                <Text style={styles.settingIcon}>👑</Text>
-                <Text style={styles.settingLabel}>Premium Status (TEST)</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={[styles.settingValue, { color: '#8B5CF6', fontWeight: '600' }]}>
-                  Tap to unlock
-                </Text>
-                <Text style={styles.settingArrow}>→</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() => setShowGoalModal(true)}
-            >
-              <View style={styles.settingLeft}>
-                <Text style={styles.settingIcon}>🎯</Text>
-                <Text style={styles.settingLabel}>Daily Scan Goal</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.settingValue}>{userSettings.scanGoal} scans</Text>
-                <Text style={styles.settingArrow}>→</Text>
-              </View>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.settingItem}
-              onPress={() => setShowStatsModal(true)}
-            >
-              <View style={styles.settingLeft}>
-                <Text style={styles.settingIcon}>📊</Text>
-                <Text style={styles.settingLabel}>Dashboard Stats</Text>
-              </View>
-              <View style={styles.settingRight}>
-                <Text style={styles.settingValue}>{userSettings.dashboardStats.length} active</Text>
-                <Text style={styles.settingArrow}>→</Text>
-              </View>
-            </TouchableOpacity>
+          <View style={styles.settingRight}>
+            <Text style={[styles.settingValue, { color: '#8B5CF6', fontWeight: '600' }]}>
+              Tap to unlock
+            </Text>
+            <Text style={styles.settingArrow}>→</Text>
           </View>
+        </TouchableOpacity>
 
-          {/* ===== NEW: DEVELOPER TESTING SECTION ===== */}
-          <View style={testingStyles.testingSection}>
-            <Text style={styles.sectionTitle}>🧪 Developer Testing</Text>
-            
-            <View style={testingStyles.statusCard}>
-              <View style={testingStyles.statusRow}>
-                <Text style={testingStyles.statusLabel}>Current Tier:</Text>
-                <Text style={testingStyles.statusValue}>
-                  {currentTier === 'free' && '🆓 FREE'}
-                  {currentTier === 'plus' && '⭐ PLUS'}
-                  {currentTier === 'pro' && '👑 PRO'}
-                </Text>
-              </View>
-              <View style={testingStyles.statusRow}>
-                <Text style={testingStyles.statusLabel}>Today's Scans:</Text>
-                <Text style={testingStyles.statusValue}>
-                  {todayScans}/{scanLimit === -1 ? '∞' : scanLimit}
-                </Text>
-              </View>
-            </View>
-
-            <Text style={testingStyles.buttonGroupLabel}>Switch Tier:</Text>
-            <View style={testingStyles.tierButtonsRow}>
-              <TouchableOpacity
-                style={[
-                  testingStyles.tierButton,
-                  currentTier === 'free' && testingStyles.tierButtonActive
-                ]}
-                onPress={switchToFree}
-              >
-                <Text style={testingStyles.tierButtonIcon}>🆓</Text>
-                <Text style={testingStyles.tierButtonText}>Free</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  testingStyles.tierButton,
-                  currentTier === 'plus' && testingStyles.tierButtonActive
-                ]}
-                onPress={switchToPlus}
-              >
-                <Text style={testingStyles.tierButtonIcon}>⭐</Text>
-                <Text style={testingStyles.tierButtonText}>Plus</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  testingStyles.tierButton,
-                  currentTier === 'pro' && testingStyles.tierButtonActive
-                ]}
-                onPress={switchToPro}
-              >
-                <Text style={testingStyles.tierButtonIcon}>👑</Text>
-                <Text style={testingStyles.tierButtonText}>Pro</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={testingStyles.actionButtonsRow}>
-              <TouchableOpacity
-                style={testingStyles.actionButton}
-                onPress={resetScans}
-              >
-                <Text style={testingStyles.actionButtonIcon}>🔄</Text>
-                <Text style={testingStyles.actionButtonText}>Reset</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={testingStyles.actionButton}
-                onPress={showStatus}
-              >
-                <Text style={testingStyles.actionButtonIcon}>📊</Text>
-                <Text style={testingStyles.actionButtonText}>Status</Text>
-              </TouchableOpacity>
-            </View>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => setShowGoalModal(true)}
+        >
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>🎯</Text>
+            <Text style={styles.settingLabel}>Daily Scan Goal</Text>
           </View>
+          <View style={styles.settingRight}>
+            <Text style={styles.settingValue}>{userSettings.scanGoal} scans</Text>
+            <Text style={styles.settingArrow}>→</Text>
+          </View>
+        </TouchableOpacity>
 
-          <TouchableOpacity style={styles.premiumButtonWrapper}>
-            <LinearGradient
-              colors={['#FBBF24', '#F59E0B']}
-              style={styles.premiumButton}
-            >
-              <Text style={styles.premiumIcon}>👑</Text>
-              <View style={styles.premiumInfo}>
-                <Text style={styles.premiumTitle}>Go Premium</Text>
-                <Text style={styles.premiumSubtitle}>Unlimited scans, no ads</Text>
-              </View>
-              <Text style={styles.premiumArrow}>→</Text>
-            </LinearGradient>
+        <TouchableOpacity
+          style={styles.settingItem}
+          onPress={() => setShowStatsModal(true)}
+        >
+          <View style={styles.settingLeft}>
+            <Text style={styles.settingIcon}>📊</Text>
+            <Text style={styles.settingLabel}>Dashboard Stats</Text>
+          </View>
+          <View style={styles.settingRight}>
+            <Text style={styles.settingValue}>{userSettings.dashboardStats.length} active</Text>
+            <Text style={styles.settingArrow}>→</Text>
+          </View>
+        </TouchableOpacity>
+      </View>
+
+      {/* Developer Testing Section */}
+      <View style={testingStyles.testingSection}>
+        <Text style={styles.sectionTitle}>🧪 Developer Testing</Text>
+        
+        <View style={testingStyles.statusCard}>
+          <View style={testingStyles.statusRow}>
+            <Text style={testingStyles.statusLabel}>Current Tier:</Text>
+            <Text style={testingStyles.statusValue}>
+              {currentTier === 'free' && '🆓 FREE'}
+              {currentTier === 'plus' && '⭐ PLUS'}
+              {currentTier === 'pro' && '👑 PRO'}
+            </Text>
+          </View>
+          <View style={testingStyles.statusRow}>
+            <Text style={testingStyles.statusLabel}>Today's Scans:</Text>
+            <Text style={testingStyles.statusValue}>
+              {todayScans}/{scanLimit === -1 ? '∞' : scanLimit}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={testingStyles.buttonGroupLabel}>Switch Tier:</Text>
+        <View style={testingStyles.tierButtonsRow}>
+          <TouchableOpacity
+            style={[
+              testingStyles.tierButton,
+              currentTier === 'free' && testingStyles.tierButtonActive
+            ]}
+            onPress={switchToFree}
+          >
+            <Text style={testingStyles.tierButtonIcon}>🆓</Text>
+            <Text style={testingStyles.tierButtonText}>Free</Text>
           </TouchableOpacity>
 
-          {/* ===== SIGN OUT BUTTON ===== */}
           <TouchableOpacity
-            style={styles.signOutButton}
-            onPress={handleSignOut}
+            style={[
+              testingStyles.tierButton,
+              currentTier === 'plus' && testingStyles.tierButtonActive
+            ]}
+            onPress={switchToPlus}
           >
-            <Text style={styles.signOutIcon}>🚪</Text>
-            <Text style={styles.signOutText}>Sign Out</Text>
+            <Text style={testingStyles.tierButtonIcon}>⭐</Text>
+            <Text style={testingStyles.tierButtonText}>Plus</Text>
           </TouchableOpacity>
-        </ScrollView>
 
-        <View style={styles.bottomNav}>
           <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveTab('home')}
+            style={[
+              testingStyles.tierButton,
+              currentTier === 'pro' && testingStyles.tierButtonActive
+            ]}
+            onPress={switchToPro}
           >
-            <Text style={styles.navIcon}>🏠</Text>
-            <Text style={styles.navLabel}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.navItem}
-            onPress={() => setActiveTab('history')}
-          >
-            <Text style={styles.navIcon}>📊</Text>
-            <Text style={styles.navLabel}>History</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.navItem, styles.navItemActive]}
-            onPress={() => setActiveTab('profile')}
-          >
-            <LinearGradient
-              colors={['#667EEA', '#764BA2']}
-              style={styles.navActiveIndicator}
-            />
-            <Text style={[styles.navIcon, styles.navIconActive]}>👤</Text>
-            <Text style={[styles.navLabel, styles.navLabelActive]}>Profile</Text>
+            <Text style={testingStyles.tierButtonIcon}>👑</Text>
+            <Text style={testingStyles.tierButtonText}>Pro</Text>
           </TouchableOpacity>
         </View>
 
-        <NameEditModal
-          visible={showNameEditModal}
-          currentName={userSettings.userName}
-          onClose={() => {
-            setShowNameEditModal(false);
-          }}
-          onSave={async (newName) => {
-            await UserSettingsService.updateUserName(newName);
-            const newSettings = await UserSettingsService.getSettings();
-            setUserSettings(newSettings);
-            setShowNameEditModal(false);
-          }}
-        />
-        <GoalEditModal
-          visible={showGoalModal}
-          currentGoal={userSettings.scanGoal}
-          onClose={() => {
-            setShowGoalModal(false);
-          }}
-          onSave={async (newGoal) => {
-            await UserSettingsService.updateScanGoal(newGoal);
-            const newSettings = await UserSettingsService.getSettings();
-            setUserSettings(newSettings);
-            setShowGoalModal(false);
-          }}
-        />
-        <StatsSelectorModal
-          visible={showStatsModal}
-          currentStats={userSettings.dashboardStats}
-          onClose={() => {
-            setShowStatsModal(false);
-          }}
-          onSave={async (newStats) => {
-            await UserSettingsService.updateDashboardStats(newStats);
-            const newSettings = await UserSettingsService.getSettings();
-            setUserSettings(newSettings);
-            setShowStatsModal(false);
-          }}
-        />
-      </ResponsiveContainer>
-    </SafeAreaView>
+        <View style={testingStyles.actionButtonsRow}>
+          <TouchableOpacity
+            style={testingStyles.actionButton}
+            onPress={resetScans}
+          >
+            <Text style={testingStyles.actionButtonIcon}>🔄</Text>
+            <Text style={testingStyles.actionButtonText}>Reset</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={testingStyles.actionButton}
+            onPress={showStatus}
+          >
+            <Text style={testingStyles.actionButtonIcon}>📊</Text>
+            <Text style={testingStyles.actionButtonText}>Status</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.premiumButtonWrapper}>
+        <LinearGradient
+          colors={['#FBBF24', '#F59E0B']}
+          style={styles.premiumButton}
+        >
+          <Text style={styles.premiumIcon}>👑</Text>
+          <View style={styles.premiumInfo}>
+            <Text style={styles.premiumTitle}>Go Premium</Text>
+            <Text style={styles.premiumSubtitle}>Unlimited scans, no ads</Text>
+          </View>
+          <Text style={styles.premiumArrow}>→</Text>
+        </LinearGradient>
+      </TouchableOpacity>
+
+      {/* Sign Out Button */}
+      <TouchableOpacity
+        style={styles.signOutButton}
+        onPress={handleSignOut}
+      >
+        <Text style={styles.signOutIcon}>🚪</Text>
+        <Text style={styles.signOutText}>Sign Out</Text>
+      </TouchableOpacity>
+
+      {/* Modals */}
+      <NameEditModal
+        visible={showNameEditModal}
+        currentName={userSettings.userName}
+        onClose={() => {
+          setShowNameEditModal(false);
+        }}
+        onSave={async (newName) => {
+          await UserSettingsService.updateUserName(newName);
+          const newSettings = await UserSettingsService.getSettings();
+          setUserSettings(newSettings);
+          setShowNameEditModal(false);
+        }}
+      />
+      <GoalEditModal
+        visible={showGoalModal}
+        currentGoal={userSettings.scanGoal}
+        onClose={() => {
+          setShowGoalModal(false);
+        }}
+        onSave={async (newGoal) => {
+          await UserSettingsService.updateScanGoal(newGoal);
+          const newSettings = await UserSettingsService.getSettings();
+          setUserSettings(newSettings);
+          setShowGoalModal(false);
+        }}
+      />
+      <StatsSelectorModal
+        visible={showStatsModal}
+        currentStats={userSettings.dashboardStats}
+        onClose={() => {
+          setShowStatsModal(false);
+        }}
+        onSave={async (newStats) => {
+          await UserSettingsService.updateDashboardStats(newStats);
+          const newSettings = await UserSettingsService.getSettings();
+          setUserSettings(newSettings);
+          setShowStatsModal(false);
+        }}
+      />
+    </ScreenContainer>
   );
 };
 

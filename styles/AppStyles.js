@@ -403,14 +403,16 @@ export const styles = StyleSheet.create({
     textAlign: 'center',
   },
   gradientHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
+  flexDirection: 'row',
+  alignItems: 'center',
+  justifyContent: 'center',
+  paddingHorizontal: 20,
+  paddingVertical: 15,
+  paddingTop: 80,           // ← ADD THIS LINE
+  minHeight: 60,            // ← ADD THIS LINE
+  borderBottomWidth: 1,
+  borderBottomColor: '#E2E8F0',
+},
   headerTitleCenter: {
     fontSize: 18,
     fontWeight: '700',
@@ -621,20 +623,20 @@ export const styles = StyleSheet.create({
   },
 
   // Bottom Navigation
-  bottomNav: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    backgroundColor: '#FFFFFF',
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    paddingBottom: 10,
-  },
+ bottomNav: {
+  position: 'absolute',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  height: 70,                    // ← CHANGED from 70 to 80
+  backgroundColor: '#FFFFFF',
+  flexDirection: 'row',
+  justifyContent: 'space-around',
+  alignItems: 'center',
+  borderTopWidth: 1,
+  borderTopColor: '#E2E8F0',
+  paddingBottom: 8,              // ← CHANGED from 10 to 20
+},
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
@@ -801,9 +803,10 @@ export const styles = StyleSheet.create({
 
   // History Screen
   historyList: {
-    padding: getResponsiveSize(15, 30, 40),
-    paddingBottom: 100,
-  },
+  paddingHorizontal: getResponsiveSize(15, 30, 40),
+  paddingTop: 0,
+  paddingBottom: 90,
+},
   historyItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -918,7 +921,7 @@ cameraIconText: {
 },
   profileContent: {
     flex: 1,
-    marginTop: -20,
+    marginTop: 0,
   },
   profileStats: {
     flexDirection: 'row',

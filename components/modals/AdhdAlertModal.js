@@ -34,7 +34,11 @@ const AdhdAlertModal = ({
               <Text style={styles.titleFree}>ADHD Additives Detected</Text>
             </View>
 
-            <ScrollView style={styles.content}>
+            <ScrollView 
+  style={styles.content}
+  contentContainerStyle={{ paddingBottom: 100 }}
+  showsVerticalScrollIndicator={false}
+>
               <Text style={styles.countText}>
                 This product contains {adhdAdditives.length} {adhdAdditives.length === 1 ? 'additive' : 'additives'} that may affect ADHD symptoms.
               </Text>
@@ -101,7 +105,11 @@ const AdhdAlertModal = ({
             <Text style={styles.titlePremium}>ADHD ALERT</Text>
           </View>
 
-          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+          <ScrollView 
+  style={styles.content} 
+  contentContainerStyle={{ paddingBottom: 100 }}
+  showsVerticalScrollIndicator={false}
+>
             <Text style={styles.alertDescription}>
               This product contains additives linked to ADHD symptoms in children:
             </Text>
@@ -163,21 +171,30 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
+    justifyContent: 'center',     // ← CHANGED from 'flex-end'
+    alignItems: 'center',          // ← ADDED
+    padding: 20,                   // ← ADDED
   },
   modalContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
-    paddingBottom: 20,
-  },
+  backgroundColor: 'white',
+  borderRadius: 20,
+  width: '100%',
+  maxWidth: 500,
+  maxHeight: '95%',    // ← CHANGED
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 2 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 5,
+},
   headerFree: {
     alignItems: 'center',
     paddingTop: 24,
     paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
+    borderTopLeftRadius: 20,       // ← ADDED
+    borderTopRightRadius: 20,      // ← ADDED
   },
   headerPremium: {
     alignItems: 'center',
@@ -186,6 +203,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#FEE2E2',
     backgroundColor: '#FEF2F2',
+    borderTopLeftRadius: 20,       // ← ADDED
+    borderTopRightRadius: 20,      // ← ADDED
   },
   iconLarge: {
     fontSize: 48,
@@ -339,6 +358,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     paddingHorizontal: 20,
     paddingTop: 16,
+    paddingBottom: 20,           // ← ADDED for bottom spacing
     gap: 12,
   },
   closeButton: {
