@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -14,6 +14,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import ProductService from '../services/ProductService';
+import PremiumService from '../services/PremiumService';
+import AdhdAlertModal from '../components/modals/AdhdAlertModal';
 import { getGradeGradient, getResultBackgroundColor, getStatusBadgeColor } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +29,54 @@ const ResultsScreen = ({
   setIsScanning,
   fadeAnim,
   styles,
+  setShowUpgradeModal,
+  setUpgradeReason,
 }) => {
+  // State for ADHD alert modal
+  const [showAdhdAlert, setShowAdhdAlert] = useState(false);
+  const [adhdAdditives, setAdhdAdditives] = useState([]);
+  const [isPremium, setIsPremium] = useState(false);
+
+  // Check for ADHD additives when product loads
+  useEffect(() => {
+    checkAdhdAdditives();
+  }, [currentProduct]);
+
+  const checkAdhdAdditives = async () => {
+    try {
+      // Check premium status
+      const premiumStatus = await PremiumService.isPremium();
+      setIsPremium(premiumStatus);
+
+      // Detect ADHD-linked additives
+      const detectedAdditives = ProductService.detectAdhdAdditives(currentProduct);
+      
+      if (detectedAdditives && detectedAdditives.length > 0) {
+        console.log(`🧠 Found ${detectedAdditives.length} ADHD-linked additives, showing alert`);
+        setAdhdAdditives(detectedAdditives);
+        setShowAdhdAlert(true);
+      } else {
+        console.log('✅ No ADHD-linked additives found');
+      }
+    } catch (error) {
+      console.error('Error checking ADHD additives:', error);
+    }
+  };
+
+  const handleUpgradeFromAdhdAlert = () => {
+    setShowAdhdAlert(false);
+    if (setUpgradeReason && setShowUpgradeModal) {
+      setUpgradeReason('adhd');
+      setShowUpgradeModal(true);
+    } else {
+      Alert.alert(
+        'Upgrade to Plus',
+        'Get detailed ADHD additive warnings with Plus membership for $4.99/month',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+
   const ResponsiveContainer = ({ children, style }) => (
     <View style={[
       styles.responsiveContainer,
@@ -408,6 +457,14 @@ const ResultsScreen = ({
           </Animated.View>
         </ScrollView>
       </ResponsiveContainer>
+
+      <AdhdAlertModal
+        visible={showAdhdAlert}
+        onClose={() => setShowAdhdAlert(false)}
+        onUpgrade={handleUpgradeFromAdhdAlert}
+        adhdAdditives={adhdAdditives}
+        isPremium={isPremium}
+      />
     </SafeAreaView>
   );
 };

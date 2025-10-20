@@ -7,6 +7,78 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAdditiveInfo } from './additives-database';
 import { HARMFUL_INGREDIENTS_DATABASE } from './harmful-ingredients-master';
 
+// ADHD-LINKED ADDITIVES DATABASE
+// Based on Southampton Study (2007) and FDA research
+const ADHD_LINKED_ADDITIVES = {
+  // High Risk - Strong evidence linking to ADHD symptoms
+  high: [
+    {
+      code: 'E102',
+      name: 'Tartrazine (Yellow 5)',
+      commonNames: ['yellow 5', 'tartrazine', 'fd&c yellow 5'],
+      adhdEffects: ['Hyperactivity', 'Difficulty focusing', 'Impulsivity'],
+    },
+    {
+      code: 'E110',
+      name: 'Sunset Yellow FCF (Yellow 6)',
+      commonNames: ['yellow 6', 'sunset yellow', 'fd&c yellow 6'],
+      adhdEffects: ['Hyperactivity', 'Attention problems', 'Behavioral changes'],
+    },
+    {
+      code: 'E129',
+      name: 'Allura Red AC (Red 40)',
+      commonNames: ['red 40', 'allura red', 'fd&c red 40'],
+      adhdEffects: ['Hyperactivity in children', 'Sleep disturbances', 'Aggression'],
+    },
+    {
+      code: 'E127',
+      name: 'Erythrosine (Red 3)',
+      commonNames: ['red 3', 'erythrosine', 'fd&c red 3'],
+      adhdEffects: ['Hyperactivity', 'Thyroid issues', 'Behavioral problems'],
+    },
+    {
+      code: 'E133',
+      name: 'Brilliant Blue FCF (Blue 1)',
+      commonNames: ['blue 1', 'brilliant blue', 'fd&c blue 1'],
+      adhdEffects: ['Hyperactivity', 'Allergic reactions', 'Learning difficulties'],
+    },
+    {
+      code: 'E132',
+      name: 'Indigotine (Blue 2)',
+      commonNames: ['blue 2', 'indigo carmine', 'fd&c blue 2'],
+      adhdEffects: ['Hyperactivity', 'Brain tumors (animal studies)', 'Attention issues'],
+    },
+    {
+      code: 'E104',
+      name: 'Quinoline Yellow',
+      commonNames: ['quinoline yellow', 'yellow 10'],
+      adhdEffects: ['Hyperactivity', 'Skin rashes', 'Asthma'],
+    },
+  ],
+  
+  // Medium Risk - Some evidence of ADHD impact
+  medium: [
+    {
+      code: 'E211',
+      name: 'Sodium Benzoate',
+      commonNames: ['sodium benzoate', 'benzoate of soda'],
+      adhdEffects: ['Hyperactivity when combined with colors', 'Attention problems'],
+    },
+    {
+      code: 'E320',
+      name: 'BHA (Butylated Hydroxyanisole)',
+      commonNames: ['bha', 'butylated hydroxyanisole'],
+      adhdEffects: ['Hyperactivity', 'Hormonal disruption', 'Focus issues'],
+    },
+    {
+      code: 'E321',
+      name: 'BHT (Butylated Hydroxytoluene)',
+      commonNames: ['bht', 'butylated hydroxytoluene'],
+      adhdEffects: ['Hyperactivity', 'Behavioral changes', 'Sleep problems'],
+    },
+  ],
+};
+
 // Generic placeholder image for products without images
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgdmlld0JveD0iMCAwIDIwMCAyMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIiBmaWxsPSIjRjNGNEY2Ii8+CjxyZWN0IHg9IjQwIiB5PSI1MCIgd2lkdGg9IjgiIGhlaWdodD0iODAiIGZpbGw9IiM5Q0EzQUYiLz4KPHJlY3QgeD0iNTIiIHk9IjUwIiB3aWR0aD0iNCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8cmVjdCB4PSI2MCIgeT0iNTAiIHdpZHRoPSI4IiBoZWlnaHQ9IjgwIiBmaWxsPSIjOUNBM0FGIi8+CjxyZWN0IHg9IjcyIiB5PSI1MCIgd2lkdGg9IjQiIGhlaWdodD0iODAiIGZpbGw9IiM5Q0EzQUYiLz4KPHJlY3QgeD0iODAiIHk9IjUwIiB3aWR0aD0iMTIiIGhlaWdodD0iODAiIGZpbGw9IiM5Q0EzQUYiLz4KPHJlY3QgeD0iOTYiIHk9IjUwIiB3aWR0aD0iNCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8cmVjdCB4PSIxMDQiIHk9IjUwIiB3aWR0aD0iOCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8cmVjdCB4PSIxMTYiIHk9IjUwIiB3aWR0aD0iNCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8cmVjdCB4PSIxMjQiIHk9IjUwIiB3aWR0aD0iOCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8cmVjdCB4PSIxMzYiIHk9IjUwIiB3aWR0aD0iNCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8cmVjdCB4PSIxNDQiIHk9IjUwIiB3aWR0aD0iOCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8cmVjdCB4PSIxNTYiIHk9IjUwIiB3aWR0aD0iNCIgaGVpZ2h0PSI4MCIgZmlsbD0iIzlDQTNBRiIvPgo8dGV4dCB4PSIxMDAiIHk9IjE1NSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE0IiBmaWxsPSIjNkI3MjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5ObyBpbWFnZSBhdmFpbGFibGU8L3RleHQ+Cjwvc3ZnPg==';
 
@@ -1093,6 +1165,253 @@ class ProductService {
       penalty: totalPenalty, 
       warnings: warnings
     };
+  }
+
+/**
+   * Detect ADHD-linked additives in product
+   * Returns array of concerning additives for ADHD
+   * VERSION 1.0.9 - Enhanced debug logging
+   */
+  static detectAdhdAdditives(product) {
+    const detectedAdditives = [];
+    
+    console.log('');
+    console.log('═══════════════════════════════════════════');
+    console.log('🧠 ADHD DETECTION STARTED');
+    console.log('═══════════════════════════════════════════');
+    console.log('📦 Product:', product.name || 'Unknown');
+    
+    // Get ingredients text
+    const ingredientsText = (product.ingredients_text || product.ingredients || '').toLowerCase();
+    console.log('📋 Ingredients text length:', ingredientsText.length);
+    console.log('📋 First 200 chars:', ingredientsText.substring(0, 200));
+    
+    // Get processed additives from product
+    const processedAdditives = product.criticalAdditives || [];
+    const concerningAdditives = product.concerningAdditives || [];
+    const allAdditives = [...processedAdditives, ...concerningAdditives];
+    console.log('📊 Processed additives count:', allAdditives.length);
+    if (allAdditives.length > 0) {
+      console.log('📊 Processed additives:', allAdditives.map(a => a.code || a.name).join(', '));
+    }
+    
+    // Check warnings array (where additives often appear)
+    const warnings = product.healthScore?.warnings || product.warnings || [];
+    console.log('⚠️  Warnings array count:', warnings.length);
+    if (warnings.length > 0) {
+      console.log('⚠️  Warning titles:', warnings.map(w => w.title).join(' | '));
+    }
+    
+    console.log('');
+    console.log('🔍 CHECKING HIGH-RISK ADDITIVES (7 total)');
+    console.log('─────────────────────────────────────────');
+    
+    // Check high-risk additives
+    for (const additive of ADHD_LINKED_ADDITIVES.high) {
+      let found = false;
+      let matchedBy = '';
+      let matchedTerm = '';
+      
+      console.log(`\n  Checking: ${additive.name} (${additive.code})`);
+      console.log(`  Common names: ${additive.commonNames.join(', ')}`);
+      
+      // Method 1: Check by E-number code in processed additives
+      const foundByCode = allAdditives.find(a => 
+        a.code && a.code.toLowerCase() === additive.code.toLowerCase()
+      );
+      
+      if (foundByCode) {
+        found = true;
+        matchedBy = 'E-number in processed additives';
+        matchedTerm = foundByCode.code;
+        console.log(`  ✅ MATCH: ${matchedBy} (${matchedTerm})`);
+        
+        detectedAdditives.push({
+          ...foundByCode,
+          adhdEffects: additive.adhdEffects,
+          severity: 'high',
+        });
+        continue;
+      } else {
+        console.log(`  ❌ Not found in processed additives`);
+      }
+      
+      // Method 2: Check warnings array for common names
+      for (const warning of warnings) {
+        const warningTitle = (warning.title || '').toLowerCase();
+        const warningDesc = (warning.description || '').toLowerCase();
+        const warningText = `${warningTitle} ${warningDesc}`;
+        
+        // Check if any common name appears in the warning
+        for (const commonName of additive.commonNames) {
+          if (warningText.includes(commonName.toLowerCase())) {
+            found = true;
+            matchedBy = 'warning text';
+            matchedTerm = commonName;
+            console.log(`  ✅ MATCH: Found "${commonName}" in warning: "${warning.title}"`);
+            break;
+          }
+        }
+        
+        if (found) break;
+      }
+      
+      if (found && matchedBy === 'warning text') {
+        detectedAdditives.push({
+          code: additive.code,
+          name: additive.name,
+          severity: 'high',
+          category: 'color',
+          description: `Synthetic color additive`,
+          healthImpact: `Studies link to ADHD symptoms in children`,
+          adhdEffects: additive.adhdEffects,
+        });
+        continue;
+      } else if (!found) {
+        console.log(`  ❌ Not found in warnings`);
+      }
+      
+      // Method 3: Check by common names in ingredients text
+      for (const commonName of additive.commonNames) {
+        if (ingredientsText.includes(commonName.toLowerCase())) {
+          found = true;
+          matchedBy = 'ingredients text';
+          matchedTerm = commonName;
+          console.log(`  ✅ MATCH: Found "${commonName}" in ingredients text`);
+          
+          detectedAdditives.push({
+            code: additive.code,
+            name: additive.name,
+            severity: 'high',
+            category: 'color',
+            description: `Synthetic color additive`,
+            healthImpact: `Studies link to ADHD symptoms in children`,
+            adhdEffects: additive.adhdEffects,
+          });
+          break;
+        }
+      }
+      
+      if (!found) {
+        console.log(`  ❌ Not found in ingredients text`);
+      }
+    }
+    
+    console.log('');
+    console.log('🔍 CHECKING MEDIUM-RISK ADDITIVES (3 total)');
+    console.log('─────────────────────────────────────────');
+    
+    // Check medium-risk additives (same logic)
+    for (const additive of ADHD_LINKED_ADDITIVES.medium) {
+      let found = false;
+      let matchedBy = '';
+      let matchedTerm = '';
+      
+      console.log(`\n  Checking: ${additive.name} (${additive.code})`);
+      console.log(`  Common names: ${additive.commonNames.join(', ')}`);
+      
+      // Method 1: Check by E-number code
+      const foundByCode = allAdditives.find(a => 
+        a.code && a.code.toLowerCase() === additive.code.toLowerCase()
+      );
+      
+      if (foundByCode) {
+        found = true;
+        matchedBy = 'E-number in processed additives';
+        matchedTerm = foundByCode.code;
+        console.log(`  ✅ MATCH: ${matchedBy} (${matchedTerm})`);
+        
+        detectedAdditives.push({
+          ...foundByCode,
+          adhdEffects: additive.adhdEffects,
+          severity: 'medium',
+        });
+        continue;
+      } else {
+        console.log(`  ❌ Not found in processed additives`);
+      }
+      
+      // Method 2: Check warnings array
+      for (const warning of warnings) {
+        const warningTitle = (warning.title || '').toLowerCase();
+        const warningDesc = (warning.description || '').toLowerCase();
+        const warningText = `${warningTitle} ${warningDesc}`;
+        
+        for (const commonName of additive.commonNames) {
+          if (warningText.includes(commonName.toLowerCase())) {
+            found = true;
+            matchedBy = 'warning text';
+            matchedTerm = commonName;
+            console.log(`  ✅ MATCH: Found "${commonName}" in warning: "${warning.title}"`);
+            break;
+          }
+        }
+        
+        if (found) break;
+      }
+      
+      if (found && matchedBy === 'warning text') {
+        detectedAdditives.push({
+          code: additive.code,
+          name: additive.name,
+          severity: 'medium',
+          category: 'preservative',
+          description: `Preservative/antioxidant`,
+          healthImpact: `Some studies link to ADHD symptoms`,
+          adhdEffects: additive.addhEffects,
+        });
+        continue;
+      } else if (!found) {
+        console.log(`  ❌ Not found in warnings`);
+      }
+      
+      // Method 3: Check ingredients text
+      for (const commonName of additive.commonNames) {
+        if (ingredientsText.includes(commonName.toLowerCase())) {
+          found = true;
+          matchedBy = 'ingredients text';
+          matchedTerm = commonName;
+          console.log(`  ✅ MATCH: Found "${commonName}" in ingredients text`);
+          
+          detectedAdditives.push({
+            code: additive.code,
+            name: additive.name,
+            severity: 'medium',
+            category: 'preservative',
+            description: `Preservative/antioxidant`,
+            healthImpact: `Some studies link to ADHD symptoms`,
+            adhdEffects: additive.adhdEffects,
+          });
+          break;
+        }
+      }
+      
+      if (!found) {
+        console.log(`  ❌ Not found in ingredients text`);
+      }
+    }
+    
+    // Remove duplicates
+    const uniqueAdditives = detectedAdditives.filter((additive, index, self) =>
+      index === self.findIndex((a) => a.code === additive.code)
+    );
+    
+    console.log('');
+    console.log('═══════════════════════════════════════════');
+    console.log(`🧠 ADHD DETECTION COMPLETE`);
+    console.log(`📊 Found ${uniqueAdditives.length} ADHD-linked additives`);
+    if (uniqueAdditives.length > 0) {
+      console.log('📋 Detected additives:');
+      uniqueAdditives.forEach(a => {
+        console.log(`   - ${a.name} (${a.code}) - ${a.severity} risk`);
+      });
+    } else {
+      console.log('✅ No ADHD-linked additives detected');
+    }
+    console.log('═══════════════════════════════════════════');
+    console.log('');
+    
+    return uniqueAdditives;
   }
 
   /**

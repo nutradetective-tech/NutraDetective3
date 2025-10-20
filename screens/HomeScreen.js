@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import CameraScanner from '../components/CameraScanner';
 import SimpleScanner from '../components/SimpleScanner';
 import ScannerSelector from '../components/ScannerSelector';
+import PremiumService from '../services/PremiumService';
 import { getResponsiveSize, isTablet } from '../utils/responsive';
 import { formatDate, getGreeting } from '../utils/formatters';
 import { getGradeGradient, getTodayScans, getAverageGrade, calculateStreak, getGradeColor } from '../utils/calculations';
@@ -34,7 +35,37 @@ const HomeScreen = ({
   pulseAnim,
   fadeAnim,
   styles,
+  setShowUpgradeModal,
+  setUpgradeReason,
 }) => {
+  // State for scan counter
+  const [currentTier, setCurrentTier] = useState('free');
+  const [scansRemaining, setScansRemaining] = useState(7);
+  const [scanLimit, setScanLimit] = useState(7);
+
+  // Load tier status on mount
+  useEffect(() => {
+    loadTierStatus();
+  }, []);
+
+  // Function to load tier status
+  const loadTierStatus = async () => {
+    try {
+      const status = await PremiumService.getStatus();
+      setCurrentTier(status.tier);
+      setScansRemaining(status.scansRemaining);
+      setScanLimit(status.scanLimit);
+    } catch (error) {
+      console.error('Error loading tier status:', error);
+    }
+  };
+
+  // Handle upgrade button press
+  const handleUpgradePress = () => {
+    setUpgradeReason('scans');
+    setShowUpgradeModal(true);
+  };
+
   const ResponsiveContainer = ({ children, style }) => (
     <View style={[
       styles.responsiveContainer,
@@ -174,6 +205,52 @@ const HomeScreen = ({
               })}
             </View>
 
+            {/* NEW: Scan Counter Card */}
+            <View style={scanCounterStyles.scanCounterCard}>
+              <View style={scanCounterStyles.scanCounterHeader}>
+                <Text style={scanCounterStyles.scanCounterIcon}>🎯</Text>
+                <Text style={scanCounterStyles.scanCounterTitle}>Today's Scans</Text>
+              </View>
+              
+              <View style={scanCounterStyles.scanCounterContent}>
+                {currentTier === 'pro' ? (
+                  <Text style={scanCounterStyles.scanCounterUnlimited}>
+                    ∞ Unlimited
+                  </Text>
+                ) : (
+                  <View style={scanCounterStyles.scanCounterNumbers}>
+                    <Text style={scanCounterStyles.scanCounterValue}>
+                      {scansRemaining}
+                    </Text>
+                    <Text style={scanCounterStyles.scanCounterSeparator}>/</Text>
+                    <Text style={scanCounterStyles.scanCounterLimit}>
+                      {scanLimit}
+                    </Text>
+                    <Text style={scanCounterStyles.scanCounterLabel}>remaining</Text>
+                  </View>
+                )}
+              </View>
+
+              {currentTier !== 'pro' && (
+                <TouchableOpacity 
+                  style={scanCounterStyles.upgradeButton}
+                  onPress={handleUpgradePress}
+                  activeOpacity={0.7}
+                >
+                  <LinearGradient
+                    colors={['#667EEA', '#764BA2']}
+                    style={scanCounterStyles.upgradeButtonGradient}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                  >
+                    <Text style={scanCounterStyles.upgradeButtonText}>
+                      Upgrade for more scans →
+                    </Text>
+                  </LinearGradient>
+                </TouchableOpacity>
+              )}
+            </View>
+
             <TouchableOpacity
               style={styles.scanButtonWrapper}
               onPress={() => setShowScanSelector(true)}
@@ -296,5 +373,84 @@ const HomeScreen = ({
     </SafeAreaView>
   );
 };
+
+// NEW: Scan Counter Styles
+const scanCounterStyles = StyleSheet.create({
+  scanCounterCard: {
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 16,
+    marginBottom: 20,
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: '#667EEA',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 5,
+  },
+  scanCounterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  scanCounterIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  scanCounterTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1A202C',
+  },
+  scanCounterContent: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  scanCounterUnlimited: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#667EEA',
+  },
+  scanCounterNumbers: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  scanCounterValue: {
+    fontSize: 48,
+    fontWeight: '700',
+    color: '#667EEA',
+  },
+  scanCounterSeparator: {
+    fontSize: 32,
+    fontWeight: '400',
+    color: '#94A3B8',
+    marginHorizontal: 8,
+  },
+  scanCounterLimit: {
+    fontSize: 32,
+    fontWeight: '400',
+    color: '#94A3B8',
+    marginRight: 12,
+  },
+  scanCounterLabel: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#64748B',
+  },
+  upgradeButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  upgradeButtonGradient: {
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+  },
+  upgradeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});
 
 export default HomeScreen;

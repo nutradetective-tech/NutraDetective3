@@ -437,6 +437,8 @@ useEffect(() => {
         setIsScanning={setIsScanning}
         fadeAnim={fadeAnim}
         styles={styles}
+        setShowUpgradeModal={setShowUpgradeModal}
+        setUpgradeReason={setUpgradeReason}
       />
     );
   }
@@ -497,6 +499,8 @@ useEffect(() => {
           pulseAnim={pulseAnim}
           fadeAnim={fadeAnim}
           styles={styles}
+          setShowUpgradeModal={setShowUpgradeModal}
+          setUpgradeReason={setUpgradeReason}
         />
 
         <UpgradeModal
