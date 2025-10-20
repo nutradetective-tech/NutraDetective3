@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, SafeAreaView, ScrollView } from 'react-native';
+import { View, ScrollView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomNav from './BottomNav';
 import { styles } from '../styles/AppStyles';
 import { isTablet } from '../utils/responsive';
@@ -26,6 +27,7 @@ const ScreenContainer = ({
     <SafeAreaView style={styles.container}>
       <ResponsiveContainer>
         {useScrollView ? (
+          // ScrollView path - Used by HomeScreen & ProfileScreen
           <ScrollView 
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 90 }}
@@ -34,7 +36,9 @@ const ScreenContainer = ({
             {children}
           </ScrollView>
         ) : (
-          <View style={{ flex: 1 }}>
+          // View path - Used by HistoryScreen with FlatList
+          // FIX: Add paddingBottom to give space for navigation bar
+          <View style={{ flex: 1, paddingBottom: 90 }}>
             {children}
           </View>
         )}
