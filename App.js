@@ -19,6 +19,7 @@ import {
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import ImagePickerTest from './components/ImagePickerTest';
 import PremiumService from './services/PremiumService';
+import RevenueCatService from './services/RevenueCatService';
 import UpgradeModal from './components/modals/UpgradeModal.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { styles } from './styles/AppStyles';
@@ -140,8 +141,19 @@ export default function App() {
   }, []);
   */
 
+// ===== APP INITIALIZATION WITH REVENUECA T =====
 useEffect(() => {
+    // Initialize RevenueCat first
+    const initializeRevenueCat = async () => {
+      try {
+        await RevenueCatService.initialize(user?.id);
+        console.log('✅ RevenueCat ready');
+      } catch (error) {
+        console.error('❌ RevenueCat initialization failed:', error);
+      }
+    };
 
+    initializeRevenueCat();
 
     Animated.timing(splashFadeAnim, {
       toValue: 1,
@@ -163,7 +175,7 @@ useEffect(() => {
     loadHistory();
     startPulseAnimation();
     fadeIn();
-  }, []);
+  }, [user]);
 
   const loadUserSettings = async () => {
     const settings = await UserSettingsService.getSettings();

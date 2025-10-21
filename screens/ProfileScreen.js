@@ -4,11 +4,11 @@ import {
   Text,
   TouchableOpacity,
   StatusBar,
-  ScrollView,
   StyleSheet,
   Alert,
   Image,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,18 +17,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NameEditModal from '../components/modals/NameEditModal';
 import GoalEditModal from '../components/modals/GoalEditModal';
 import StatsSelectorModal from '../components/modals/StatsSelectorModal';
+import AllergenPickerModal from '../components/modals/AllergenPickerModal';
 import UserSettingsService from '../services/UserSettingsService';
 import PremiumService from '../services/PremiumService';
 import SupabaseStorageService from '../services/SupabaseStorageService';
+import AllergenService from '../services/AllergenService';
+import { ALLERGEN_DATABASE } from '../services/allergen-database';
 import { calculateStreak } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
-import BottomNav from '../components/BottomNav';  // ← ADD THIS IMPORT
+import BottomNav from '../components/BottomNav';
 import ScreenContainer from '../components/ScreenContainer';
-// ===== SUPABASE AUTH IMPORTS =====
 import { supabase } from '../config/supabase';
 
 const ProfileScreen = ({
-  user, // ===== User prop from App.js =====
+  user,
   userSettings,
   setUserSettings,
   scanHistory,
@@ -51,30 +53,43 @@ const ProfileScreen = ({
   const [profilePictureUri, setProfilePictureUri] = useState(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // ===== NEW: Tier testing state =====
-  const [currentTier, setCurrentTier] = useState('free');
-  const [todayScans, setTodayScans] = useState(0);
-  const [scanLimit, setScanLimit] = useState(7);
+  // Allergen management state
+  const [allergenProfiles, setAllergenProfiles] = useState([]);
+  const [loadingProfiles, setLoadingProfiles] = useState(true);
+  const [expandedProfiles, setExpandedProfiles] = useState(new Set(['user']));
+  const [showAllergenPicker, setShowAllergenPicker] = useState(false);
+  const [currentPickerProfile, setCurrentPickerProfile] = useState(null);
+  const [userTier, setUserTier] = useState('free');
 
-  // Load profile picture on component mount
+  // Load profile picture and allergen profiles on mount
   useEffect(() => {
     loadProfilePicture();
-    loadTierStatus(); // ===== NEW: Load tier status =====
+    loadAllergenProfiles();
+    loadUserTier();
   }, []);
 
-  // ===== NEW: Load tier status =====
-  const loadTierStatus = async () => {
+  const loadUserTier = async () => {
     try {
       const status = await PremiumService.getStatus();
-      setCurrentTier(status.tier);
-      setTodayScans(status.todayScans);
-      setScanLimit(status.scanLimit);
+      setUserTier(status.tier);
     } catch (error) {
-      console.error('Error loading tier status:', error);
+      console.error('Error loading tier:', error);
     }
   };
 
-  // Load saved profile picture from AsyncStorage
+  const loadAllergenProfiles = async () => {
+    try {
+      setLoadingProfiles(true);
+      const profiles = await AllergenService.getAllProfiles();
+      setAllergenProfiles(profiles);
+      console.log('📋 Loaded allergen profiles:', profiles.length);
+    } catch (error) {
+      console.error('Error loading allergen profiles:', error);
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
+
   const loadProfilePicture = async () => {
     try {
       const savedUri = await AsyncStorage.getItem('profilePictureUri');
@@ -86,10 +101,8 @@ const ProfileScreen = ({
     }
   };
 
-  // Pick image from gallery
   const pickProfileImage = async () => {
     try {
-      // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
 
       if (status !== 'granted') {
@@ -101,7 +114,6 @@ const ProfileScreen = ({
         return;
       }
 
-      // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: true,
@@ -112,7 +124,6 @@ const ProfileScreen = ({
       if (!result.canceled && result.assets && result.assets[0]) {
         const imageUri = result.assets[0].uri;
 
-        // Show confirmation
         Alert.alert(
           'Upload Profile Picture?',
           'This will replace your current profile picture.',
@@ -131,27 +142,22 @@ const ProfileScreen = ({
     }
   };
 
-
   const uploadProfilePicture = async (imageUri) => {
     setUploadingImage(true);
 
     try {
-      // ✅ USE REAL USER ID from authenticated user
       if (!user || !user.id) {
         throw new Error('User not authenticated');
       }
 
-      const userId = user.id; // ✅ Supabase user ID
-
+      const userId = user.id;
       console.log('📤 Uploading profile picture for user:', userId);
 
-      // Upload to Supabase Storage
       const downloadUrl = await SupabaseStorageService.uploadProfilePicture(
         userId,
         imageUri
       );
 
-      // Save URL to state and AsyncStorage
       setProfilePictureUri(downloadUrl);
       await AsyncStorage.setItem('profilePictureUri', downloadUrl);
 
@@ -172,77 +178,6 @@ const ProfileScreen = ({
     }
   };
 
-  // ===== NEW: Tier testing handlers =====
-  const switchToFree = async () => {
-    try {
-      await PremiumService.setTestFree();
-      await loadTierStatus();
-      Alert.alert(
-        '🆓 Switched to Free',
-        '7 scans/day\n7-day history',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to switch tier');
-    }
-  };
-
-  const switchToPlus = async () => {
-    try {
-      await PremiumService.setTestPlus();
-      await loadTierStatus();
-      Alert.alert(
-        '⭐ Switched to Plus',
-        '25 scans/day\n30-day history\nADHD alerts enabled',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to switch tier');
-    }
-  };
-
-  const switchToPro = async () => {
-    try {
-      await PremiumService.setTestPro();
-      await loadTierStatus();
-      Alert.alert(
-        '👑 Switched to Pro',
-        'Unlimited scans\nUnlimited history\nFamily sharing\nAll features',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to switch tier');
-    }
-  };
-
-  const resetScans = async () => {
-    try {
-      await PremiumService.resetScanCounter();
-      await loadTierStatus();
-      Alert.alert(
-        '🔄 Scans Reset',
-        'Scan counter has been reset to 0',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to reset scans');
-    }
-  };
-
-  const showStatus = async () => {
-    try {
-      await PremiumService.logStatus();
-      Alert.alert(
-        '📊 Status Logged',
-        'Check the console for detailed status information',
-        [{ text: 'OK' }]
-      );
-    } catch (error) {
-      Alert.alert('Error', 'Failed to get status');
-    }
-  };
-
-  // ===== SIGN OUT FUNCTION (SUPABASE) =====
   const handleSignOut = () => {
     Alert.alert(
       'Sign Out',
@@ -258,7 +193,6 @@ const ProfileScreen = ({
               const { error } = await supabase.auth.signOut();
               if (error) throw error;
               console.log('✅ User signed out successfully');
-              // Auth state listener in App.js will automatically show AuthScreen
             } catch (error) {
               console.error('❌ Sign out error:', error);
               Alert.alert('Error', 'Failed to sign out. Please try again.');
@@ -267,6 +201,159 @@ const ProfileScreen = ({
         }
       ]
     );
+  };
+
+  // Allergen profile management functions
+  const toggleProfileExpanded = (profileId) => {
+    const newExpanded = new Set(expandedProfiles);
+    if (newExpanded.has(profileId)) {
+      newExpanded.delete(profileId);
+    } else {
+      newExpanded.add(profileId);
+    }
+    setExpandedProfiles(newExpanded);
+  };
+
+  const addFamilyMember = async () => {
+    try {
+      // Check tier limits
+      const canAdd = await AllergenService.canAddProfile(userTier);
+      if (!canAdd.allowed) {
+        Alert.alert(
+          canAdd.reason === 'tier_limit' ? '⭐ Upgrade Required' : '👑 Pro Required',
+          canAdd.message,
+          [
+            { text: 'Maybe Later', style: 'cancel' },
+            { text: 'Upgrade', onPress: () => {
+              // TODO: Open upgrade modal
+              console.log('Open upgrade modal');
+            }}
+          ]
+        );
+        return;
+      }
+
+      // Prompt for name
+      Alert.prompt(
+        'Add Family Member',
+        'Enter the name of the family member:',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Add',
+            onPress: async (name) => {
+              if (!name || !name.trim()) {
+                Alert.alert('Error', 'Please enter a name.');
+                return;
+              }
+
+              try {
+                await AllergenService.createProfile(name.trim(), []);
+                await loadAllergenProfiles();
+                Alert.alert(
+                  '✅ Added!',
+                  `${name} has been added to your family profiles.`,
+                  [{ text: 'Great!' }]
+                );
+              } catch (error) {
+                console.error('Error creating profile:', error);
+                Alert.alert('Error', 'Could not create profile. Please try again.');
+              }
+            }
+          }
+        ],
+        'plain-text'
+      );
+    } catch (error) {
+      console.error('Error in addFamilyMember:', error);
+      Alert.alert('Error', 'Could not add family member.');
+    }
+  };
+
+  const deleteProfile = (profileId, profileName) => {
+    if (profileId === 'user') {
+      Alert.alert('Cannot Delete', 'You cannot delete your own profile.');
+      return;
+    }
+
+    Alert.alert(
+      'Delete Profile?',
+      `Are you sure you want to delete ${profileName}'s profile? This will remove all their allergen settings.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AllergenService.deleteProfile(profileId);
+              await loadAllergenProfiles();
+              Alert.alert('✅ Deleted', `${profileName}'s profile has been removed.`);
+            } catch (error) {
+              console.error('Error deleting profile:', error);
+              Alert.alert('Error', 'Could not delete profile.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const openAllergenPicker = (profile) => {
+    setCurrentPickerProfile(profile);
+    setShowAllergenPicker(true);
+  };
+
+  const handleSelectAllergen = async (allergen) => {
+    if (!currentPickerProfile) return;
+
+    try {
+      await AllergenService.addAllergenToProfile(currentPickerProfile.id, allergen.id);
+      await loadAllergenProfiles();
+      setShowAllergenPicker(false);
+      
+      Alert.alert(
+        '✅ Added!',
+        `${allergen.name} has been added to ${currentPickerProfile.name}'s allergens.`,
+        [{ text: 'Great!' }]
+      );
+    } catch (error) {
+      console.error('Error adding allergen:', error);
+      Alert.alert('Error', 'Could not add allergen. Please try again.');
+    }
+  };
+
+  const removeAllergen = (profileId, allergenId, profileName, allergenName) => {
+    Alert.alert(
+      'Remove Allergen?',
+      `Remove ${allergenName} from ${profileName}'s allergens?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await AllergenService.removeAllergenFromProfile(profileId, allergenId);
+              await loadAllergenProfiles();
+              Alert.alert('✅ Removed', `${allergenName} has been removed.`);
+            } catch (error) {
+              console.error('Error removing allergen:', error);
+              Alert.alert('Error', 'Could not remove allergen.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  const getSeverityIcon = (severity) => {
+    switch (severity) {
+      case 'severe': return '🔴';
+      case 'moderate': return '🟡';
+      case 'mild': return '🟢';
+      default: return '⚪';
+    }
   };
 
   const ResponsiveContainer = ({ children, style }) => (
@@ -279,7 +366,7 @@ const ProfileScreen = ({
     </View>
   );
 
-return (
+  return (
     <ScreenContainer activeTab="profile" setActiveTab={setActiveTab}>
       <StatusBar barStyle="light-content" />
 
@@ -289,7 +376,6 @@ return (
       >
         <Text style={styles.profileHeaderTitle}>Profile</Text>
 
-        {/* Avatar with profile picture */}
         <TouchableOpacity
           onPress={pickProfileImage}
           disabled={uploadingImage}
@@ -313,7 +399,6 @@ return (
             )}
           </LinearGradient>
 
-          {/* Camera icon badge */}
           {!uploadingImage && (
             <View style={styles.cameraIconBadge}>
               <Text style={styles.cameraIconText}>📷</Text>
@@ -329,7 +414,6 @@ return (
           <Text style={styles.editNameText}>✏️ Edit Name</Text>
         </TouchableOpacity>
 
-        {/* Display user email below name */}
         {user && user.email && (
           <Text style={styles.userEmail}>{user.email}</Text>
         )}
@@ -354,52 +438,132 @@ return (
         </View>
       </View>
 
+      {/* ALLERGEN PROFILES SECTION */}
+      <View style={allergenStyles.section}>
+        <View style={allergenStyles.sectionHeader}>
+          <Text style={styles.sectionTitle}>🥜 Allergen Profiles</Text>
+          {userTier !== 'free' && (
+            <TouchableOpacity
+              style={allergenStyles.addButton}
+              onPress={addFamilyMember}
+            >
+              <Text style={allergenStyles.addButtonText}>+ Family</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {loadingProfiles ? (
+          <View style={allergenStyles.loadingContainer}>
+            <ActivityIndicator size="large" color="#667EEA" />
+          </View>
+        ) : (
+          allergenProfiles.map((profile) => {
+            const isExpanded = expandedProfiles.has(profile.id);
+            const allergenCount = profile.allergens.length;
+
+            return (
+              <View key={profile.id} style={allergenStyles.profileCard}>
+                {/* Profile Header */}
+                <TouchableOpacity
+                  style={allergenStyles.profileHeader}
+                  onPress={() => toggleProfileExpanded(profile.id)}
+                  activeOpacity={0.7}
+                >
+                  <View style={allergenStyles.profileHeaderLeft}>
+                    <Text style={allergenStyles.profileIcon}>
+                      {profile.id === 'user' ? '👤' : '👨‍👩‍👧'}
+                    </Text>
+                    <View>
+                      <Text style={allergenStyles.profileName}>{profile.name}</Text>
+                      <Text style={allergenStyles.profileSubtext}>
+                        {allergenCount} allergen{allergenCount !== 1 ? 's' : ''}
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={allergenStyles.expandIcon}>
+                    {isExpanded ? '▼' : '▶'}
+                  </Text>
+                </TouchableOpacity>
+
+                {/* Expanded Content */}
+                {isExpanded && (
+                  <View style={allergenStyles.profileContent}>
+                    {allergenCount === 0 ? (
+                      <View style={allergenStyles.emptyState}>
+                        <Text style={allergenStyles.emptyText}>
+                          No allergens added yet
+                        </Text>
+                      </View>
+                    ) : (
+                      <View style={allergenStyles.allergensContainer}>
+                        {profile.allergens.map((allergenId) => {
+                          const allergen = ALLERGEN_DATABASE[allergenId];
+                          if (!allergen) return null;
+
+                          return (
+                            <View key={allergenId} style={allergenStyles.allergenChip}>
+                              <Text style={allergenStyles.allergenChipIcon}>
+                                {getSeverityIcon(allergen.severity)}
+                              </Text>
+                              <Text style={allergenStyles.allergenChipText}>
+                                {allergen.name}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => removeAllergen(
+                                  profile.id,
+                                  allergenId,
+                                  profile.name,
+                                  allergen.name
+                                )}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                              >
+                                <Text style={allergenStyles.allergenChipRemove}>✕</Text>
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {/* Action Buttons */}
+                    <View style={allergenStyles.profileActions}>
+                      <TouchableOpacity
+                        style={allergenStyles.actionButton}
+                        onPress={() => openAllergenPicker(profile)}
+                      >
+                        <Text style={allergenStyles.actionButtonText}>
+                          + Add Allergen
+                        </Text>
+                      </TouchableOpacity>
+
+                      {profile.id !== 'user' && (
+                        <TouchableOpacity
+                          style={allergenStyles.deleteButton}
+                          onPress={() => deleteProfile(profile.id, profile.name)}
+                        >
+                          <Text style={allergenStyles.deleteButtonText}>🗑️</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          })
+        )}
+
+        {/* Upgrade Prompt for Free Users */}
+        {userTier === 'free' && (
+          <View style={allergenStyles.upgradePrompt}>
+            <Text style={allergenStyles.upgradePromptText}>
+              Upgrade to Plus for 100+ allergens and family profiles
+            </Text>
+          </View>
+        )}
+      </View>
+
       <View style={styles.settingsSection}>
         <Text style={styles.sectionTitle}>Personalization</Text>
-
-        <TouchableOpacity
-          style={[styles.settingItem, {
-            backgroundColor: '#FEF2F2',
-            borderWidth: 2,
-            borderColor: '#8B5CF6',
-            marginBottom: 12
-          }]}
-          onPress={async () => {
-            try {
-              const currentStatus = await PremiumService.isPremium();
-
-              if (currentStatus) {
-                await PremiumService.deactivateTestPremium();
-                Alert.alert(
-                  '✅ Premium Deactivated',
-                  'You are now on the free Seeker tier (7 scans/day).',
-                  [{ text: 'OK' }]
-                );
-              } else {
-                await PremiumService.activateTestPremium();
-                Alert.alert(
-                  '🎉 Guardian Activated!',
-                  'You now have Guardian tier for 30 days!\n\n✅ Unlimited scans\n✅ Unlimited history\n✅ No ads (coming soon)',
-                  [{ text: 'Awesome!' }]
-                );
-              }
-            } catch (error) {
-              console.error('Premium toggle error:', error);
-              Alert.alert('Error', 'Could not toggle premium status. Check console.');
-            }
-          }}
-        >
-          <View style={styles.settingLeft}>
-            <Text style={styles.settingIcon}>👑</Text>
-            <Text style={styles.settingLabel}>Premium Status (TEST)</Text>
-          </View>
-          <View style={styles.settingRight}>
-            <Text style={[styles.settingValue, { color: '#8B5CF6', fontWeight: '600' }]}>
-              Tap to unlock
-            </Text>
-            <Text style={styles.settingArrow}>→</Text>
-          </View>
-        </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.settingItem}
@@ -430,82 +594,6 @@ return (
         </TouchableOpacity>
       </View>
 
-      {/* Developer Testing Section */}
-      <View style={testingStyles.testingSection}>
-        <Text style={styles.sectionTitle}>🧪 Developer Testing</Text>
-        
-        <View style={testingStyles.statusCard}>
-          <View style={testingStyles.statusRow}>
-            <Text style={testingStyles.statusLabel}>Current Tier:</Text>
-            <Text style={testingStyles.statusValue}>
-              {currentTier === 'free' && '🆓 FREE'}
-              {currentTier === 'plus' && '⭐ PLUS'}
-              {currentTier === 'pro' && '👑 PRO'}
-            </Text>
-          </View>
-          <View style={testingStyles.statusRow}>
-            <Text style={testingStyles.statusLabel}>Today's Scans:</Text>
-            <Text style={testingStyles.statusValue}>
-              {todayScans}/{scanLimit === -1 ? '∞' : scanLimit}
-            </Text>
-          </View>
-        </View>
-
-        <Text style={testingStyles.buttonGroupLabel}>Switch Tier:</Text>
-        <View style={testingStyles.tierButtonsRow}>
-          <TouchableOpacity
-            style={[
-              testingStyles.tierButton,
-              currentTier === 'free' && testingStyles.tierButtonActive
-            ]}
-            onPress={switchToFree}
-          >
-            <Text style={testingStyles.tierButtonIcon}>🆓</Text>
-            <Text style={testingStyles.tierButtonText}>Free</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              testingStyles.tierButton,
-              currentTier === 'plus' && testingStyles.tierButtonActive
-            ]}
-            onPress={switchToPlus}
-          >
-            <Text style={testingStyles.tierButtonIcon}>⭐</Text>
-            <Text style={testingStyles.tierButtonText}>Plus</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              testingStyles.tierButton,
-              currentTier === 'pro' && testingStyles.tierButtonActive
-            ]}
-            onPress={switchToPro}
-          >
-            <Text style={testingStyles.tierButtonIcon}>👑</Text>
-            <Text style={testingStyles.tierButtonText}>Pro</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={testingStyles.actionButtonsRow}>
-          <TouchableOpacity
-            style={testingStyles.actionButton}
-            onPress={resetScans}
-          >
-            <Text style={testingStyles.actionButtonIcon}>🔄</Text>
-            <Text style={testingStyles.actionButtonText}>Reset</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={testingStyles.actionButton}
-            onPress={showStatus}
-          >
-            <Text style={testingStyles.actionButtonIcon}>📊</Text>
-            <Text style={testingStyles.actionButtonText}>Status</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-
       <TouchableOpacity style={styles.premiumButtonWrapper}>
         <LinearGradient
           colors={['#FBBF24', '#F59E0B']}
@@ -520,7 +608,6 @@ return (
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* Sign Out Button */}
       <TouchableOpacity
         style={styles.signOutButton}
         onPress={handleSignOut}
@@ -533,9 +620,7 @@ return (
       <NameEditModal
         visible={showNameEditModal}
         currentName={userSettings.userName}
-        onClose={() => {
-          setShowNameEditModal(false);
-        }}
+        onClose={() => setShowNameEditModal(false)}
         onSave={async (newName) => {
           await UserSettingsService.updateUserName(newName);
           const newSettings = await UserSettingsService.getSettings();
@@ -546,9 +631,7 @@ return (
       <GoalEditModal
         visible={showGoalModal}
         currentGoal={userSettings.scanGoal}
-        onClose={() => {
-          setShowGoalModal(false);
-        }}
+        onClose={() => setShowGoalModal(false)}
         onSave={async (newGoal) => {
           await UserSettingsService.updateScanGoal(newGoal);
           const newSettings = await UserSettingsService.getSettings();
@@ -559,9 +642,7 @@ return (
       <StatsSelectorModal
         visible={showStatsModal}
         currentStats={userSettings.dashboardStats}
-        onClose={() => {
-          setShowStatsModal(false);
-        }}
+        onClose={() => setShowStatsModal(false)}
         onSave={async (newStats) => {
           await UserSettingsService.updateDashboardStats(newStats);
           const newSettings = await UserSettingsService.getSettings();
@@ -569,97 +650,167 @@ return (
           setShowStatsModal(false);
         }}
       />
+      <AllergenPickerModal
+        visible={showAllergenPicker}
+        onClose={() => setShowAllergenPicker(false)}
+        onSelectAllergen={handleSelectAllergen}
+        selectedAllergens={currentPickerProfile?.allergens || []}
+        profileName={currentPickerProfile?.name || ''}
+      />
     </ScreenContainer>
   );
 };
 
-// ===== NEW: Testing styles =====
-const testingStyles = StyleSheet.create({
-  testingSection: {
-    backgroundColor: '#F0F9FF',
-    borderRadius: 16,
-    padding: 16,
+// Allergen-specific styles
+const allergenStyles = StyleSheet.create({
+  section: {
     marginHorizontal: 16,
     marginBottom: 16,
-    borderWidth: 2,
-    borderColor: '#667EEA',
   },
-  statusCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-  },
-  statusRow: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
-  },
-  statusLabel: {
-    fontSize: 14,
-    color: '#6B7280',
-    fontWeight: '500',
-  },
-  statusValue: {
-    fontSize: 16,
-    color: '#1F2937',
-    fontWeight: 'bold',
-  },
-  buttonGroupLabel: {
-    fontSize: 14,
-    color: '#4B5563',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  tierButtonsRow: {
-    flexDirection: 'row',
-    gap: 8,
     marginBottom: 12,
   },
-  tierButton: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
+  addButton: {
+    backgroundColor: '#667EEA',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: 12,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
   },
-  tierButtonActive: {
-    borderColor: '#667EEA',
-    backgroundColor: '#EEF2FF',
-  },
-  tierButtonIcon: {
-    fontSize: 24,
-    marginBottom: 4,
-  },
-  tierButtonText: {
-    fontSize: 12,
-    color: '#4B5563',
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
   },
-  actionButtonsRow: {
+  loadingContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  profileCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    marginBottom: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  profileHeader: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+  },
+  profileHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  profileIcon: {
+    fontSize: 32,
+    marginRight: 12,
+  },
+  profileName: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1F2937',
+    marginBottom: 2,
+  },
+  profileSubtext: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  expandIcon: {
+    fontSize: 14,
+    color: '#9CA3AF',
+  },
+  profileContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#F3F4F6',
+  },
+  emptyState: {
+    paddingVertical: 20,
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontStyle: 'italic',
+  },
+  allergensContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  allergenChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 20,
+  },
+  allergenChipIcon: {
+    fontSize: 14,
+    marginRight: 4,
+  },
+  allergenChipText: {
+    fontSize: 13,
+    color: '#374151',
+    fontWeight: '500',
+    marginRight: 4,
+  },
+  allergenChipRemove: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    fontWeight: '700',
+    marginLeft: 2,
+  },
+  profileActions: {
+    flexDirection: 'row',
+    marginTop: 12,
     gap: 8,
   },
   actionButton: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#667EEA',
+    paddingVertical: 10,
     borderRadius: 12,
-    padding: 12,
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
-  },
-  actionButtonIcon: {
-    fontSize: 20,
-    marginBottom: 4,
   },
   actionButtonText: {
-    fontSize: 12,
-    color: '#4B5563',
+    color: '#FFFFFF',
+    fontSize: 14,
     fontWeight: '600',
+  },
+  deleteButton: {
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 12,
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    fontSize: 18,
+  },
+  upgradePrompt: {
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  upgradePromptText: {
+    fontSize: 13,
+    color: '#92400E',
+    textAlign: 'center',
+    fontWeight: '500',
   },
 });
 

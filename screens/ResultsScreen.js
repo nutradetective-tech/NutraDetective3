@@ -15,6 +15,7 @@ import { Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import ProductService from '../services/ProductService';
 import PremiumService from '../services/PremiumService';
+import AllergenService from '../services/AllergenService'; // ← NEW IMPORT
 import AdhdAlertModal from '../components/modals/AdhdAlertModal';
 import { getGradeGradient, getResultBackgroundColor, getStatusBadgeColor } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
@@ -37,9 +38,14 @@ const ResultsScreen = ({
   const [adhdAdditives, setAdhdAdditives] = useState([]);
   const [isPremium, setIsPremium] = useState(false);
 
-  // Check for ADHD additives when product loads
+  // ===== NEW: Advanced allergen state =====
+  const [allergenSummary, setAllergenSummary] = useState(null);
+  const [userTier, setUserTier] = useState('FREE');
+
+  // Check for ADHD additives and allergens when product loads
   useEffect(() => {
     checkAdhdAdditives();
+    checkAllergens(); // ← NEW FUNCTION
   }, [currentProduct]);
 
   const checkAdhdAdditives = async () => {
@@ -60,6 +66,31 @@ const ResultsScreen = ({
       }
     } catch (error) {
       console.error('Error checking ADHD additives:', error);
+    }
+  };
+
+  // ===== NEW: Check allergens using new system =====
+  const checkAllergens = async () => {
+    try {
+      // Get user's tier
+      const status = await PremiumService.getStatus();
+      setUserTier(status.tier.toUpperCase());
+
+      // Get allergen summary
+      const summary = await AllergenService.getAllergenSummary(
+        currentProduct,
+        status.tier.toUpperCase()
+      );
+
+      setAllergenSummary(summary);
+
+      if (summary.hasAllergens) {
+        console.log(`🥜 Found allergens affecting ${summary.affectedProfiles} profile(s)`);
+      } else {
+        console.log('✅ No allergens detected for any profiles');
+      }
+    } catch (error) {
+      console.error('Error checking allergens:', error);
     }
   };
 
@@ -88,7 +119,8 @@ const ResultsScreen = ({
   );
 
   const productData = currentProduct.rawData || currentProduct;
-  
+
+  // ===== OLD allergen code kept for backward compatibility =====
   const userAllergenWarnings = ProductService.checkUserAllergens(
     productData,
     userSettings.activeFilters
@@ -131,6 +163,7 @@ const ResultsScreen = ({
         <ScrollView showsVerticalScrollIndicator={false}>
           <Animated.View style={[styles.resultContent, { opacity: fadeAnim }]}>
             
+            {/* Product Header - unchanged */}
             <View style={[styles.productHeaderCard, { backgroundColor: getResultBackgroundColor(currentProduct.healthScore?.score || 0) }]}>
               <LinearGradient
                 colors={getGradeGradient(currentProduct?.healthScore?.score || 0)}
@@ -179,7 +212,92 @@ const ResultsScreen = ({
               </View>
             </View>
 
-            {userAllergenWarnings && userAllergenWarnings.length > 0 && (
+            {/* ===== NEW: Advanced Allergen Warning (replaces old system) ===== */}
+            {allergenSummary && allergenSummary.hasAllergens && (
+              <View style={[
+                additionalStyles.allergenAlertBox,
+                allergenSummary.highestSeverity === 'SEVERE' && { 
+                  borderColor: '#DC2626',
+                  borderWidth: 2 
+                }
+              ]}>
+                <View style={additionalStyles.allergenHeader}>
+                  <Text style={additionalStyles.allergenIcon}>
+                    {allergenSummary.highestSeverity === 'SEVERE' ? '🔴' :
+                     allergenSummary.highestSeverity === 'MODERATE' ? '🟡' : '🟢'}
+                  </Text>
+                  <Text style={additionalStyles.allergenTitle}>
+                    {allergenSummary.highestSeverity === 'SEVERE' ? 'SEVERE ALLERGEN ALERT' :
+                     allergenSummary.highestSeverity === 'MODERATE' ? 'Allergen Warning' :
+                     'Allergen Notice'}
+                  </Text>
+                </View>
+
+                <Text style={additionalStyles.allergenDescription}>
+                  This product contains allergens affecting {allergenSummary.affectedProfiles} family member(s).
+                </Text>
+
+                {/* Show warnings by profile */}
+                {allergenSummary.detailedResults.map((result, idx) => (
+                  <View key={idx} style={additionalStyles.profileAllergenSection}>
+                    <Text style={additionalStyles.profileName}>
+                      👤 {result.profile.name}
+                      {result.profile.isDefault && ' (You)'}
+                    </Text>
+                    {result.warnings.map((warning, wIdx) => (
+                      <View key={wIdx} style={additionalStyles.allergenItemRow}>
+                        <Text style={additionalStyles.severityIcon}>
+                          {warning.severity === 'SEVERE' ? '🔴' :
+                           warning.severity === 'MODERATE' ? '🟡' : '🟢'}
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={additionalStyles.allergenItemTitle}>
+                            {warning.allergenName}
+                          </Text>
+                          <Text style={additionalStyles.allergenItemSource}>
+                            Found: {warning.matchedTerm}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
+
+                {/* Hidden allergens warning */}
+                {allergenSummary.hiddenAllergens.length > 0 && (
+                  <View style={additionalStyles.hiddenAllergenSection}>
+                    <Text style={additionalStyles.hiddenAllergenTitle}>
+                      ⚠️ Cross-Contamination Warning
+                    </Text>
+                    {allergenSummary.hiddenAllergens.map((hidden, idx) => (
+                      <Text key={idx} style={additionalStyles.hiddenAllergenText}>
+                        • {hidden.warning}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+
+                {/* Upgrade prompt if on free tier */}
+                {userTier === 'FREE' && (
+                  <TouchableOpacity
+                    style={additionalStyles.upgradeButton}
+                    onPress={() => {
+                      if (setUpgradeReason && setShowUpgradeModal) {
+                        setUpgradeReason('allergens');
+                        setShowUpgradeModal(true);
+                      }
+                    }}
+                  >
+                    <Text style={additionalStyles.upgradeButtonText}>
+                      ⭐ Upgrade to Plus for 100+ Allergens
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {/* Old allergen section - keep for backward compatibility */}
+            {userAllergenWarnings && userAllergenWarnings.length > 0 && !allergenSummary && (
               <View style={styles.allergenAlertBox}>
                 <View style={styles.allergenHeader}>
                   <Text style={styles.allergenIcon}>⚠️</Text>
@@ -202,77 +320,80 @@ const ResultsScreen = ({
               </View>
             )}
 
+            {/* All Allergens section - keep unchanged */}
             {allAllergens.length > 0 && (
-              <View style={styles.allergensSection}>
+              <View style={additionalStyles.allergensSection}>
                 <Text style={styles.sectionTitle}>🥜 All Allergens</Text>
-                <Text style={styles.allergenSubtext}>This product contains:</Text>
-                <View style={styles.allergensList}>
+                <Text style={additionalStyles.allergenSubtext}>This product contains:</Text>
+                <View style={additionalStyles.allergensList}>
                   {allAllergens.map((allergen, index) => (
-                    <View key={index} style={styles.allergenChip}>
-                      <Text style={styles.allergenChipText}>{allergen}</Text>
+                    <View key={index} style={additionalStyles.allergenChip}>
+                      <Text style={additionalStyles.allergenChipText}>{allergen}</Text>
                     </View>
                   ))}
                 </View>
               </View>
             )}
 
+            {/* REST OF THE SCREEN - UNCHANGED */}
+            {/* Nutrition section */}
             {(productData.nutriments || productData.displayData?.keyNutrients) && (
-              <View style={styles.nutritionSection}>
+              <View style={additionalStyles.nutritionSection}>
                 <Text style={styles.sectionTitle}>📊 Nutrition Facts</Text>
-                <Text style={styles.nutritionSubtext}>Per 100g</Text>
-                <View style={styles.nutritionGrid}>
+                <Text style={additionalStyles.nutritionSubtext}>Per 100g</Text>
+                <View style={additionalStyles.nutritionGrid}>
                   {productData.displayData?.keyNutrients ? (
                     Object.entries(productData.displayData.keyNutrients).map(([key, value], index) => (
-                      <View key={index} style={styles.nutritionItem}>
-                        <Text style={styles.nutritionLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
-                        <Text style={styles.nutritionValue}>{value}</Text>
+                      <View key={index} style={additionalStyles.nutritionItem}>
+                        <Text style={additionalStyles.nutritionLabel}>{key.charAt(0).toUpperCase() + key.slice(1)}</Text>
+                        <Text style={additionalStyles.nutritionValue}>{value}</Text>
                       </View>
                     ))
                   ) : (
                     <>
-                      <View style={styles.nutritionItem}>
-                        <Text style={styles.nutritionLabel}>Calories</Text>
-                        <Text style={styles.nutritionValue}>{productData.nutriments['energy-kcal_100g'] || 0} kcal</Text>
+                      <View style={additionalStyles.nutritionItem}>
+                        <Text style={additionalStyles.nutritionLabel}>Calories</Text>
+                        <Text style={additionalStyles.nutritionValue}>{productData.nutriments['energy-kcal_100g'] || 0} kcal</Text>
                       </View>
-                      <View style={styles.nutritionItem}>
-                        <Text style={styles.nutritionLabel}>Sugar</Text>
-                        <Text style={[styles.nutritionValue, 
-                          productData.nutriments['sugars_100g'] > 22.5 && styles.nutritionValueBad
+                      <View style={additionalStyles.nutritionItem}>
+                        <Text style={additionalStyles.nutritionLabel}>Sugar</Text>
+                        <Text style={[additionalStyles.nutritionValue, 
+                          productData.nutriments['sugars_100g'] > 22.5 && additionalStyles.nutritionValueBad
                         ]}>{productData.nutriments['sugars_100g'] || 0}g</Text>
                       </View>
-                      <View style={styles.nutritionItem}>
-                        <Text style={styles.nutritionLabel}>Saturated Fat</Text>
-                        <Text style={[styles.nutritionValue,
-                          productData.nutriments['saturated-fat_100g'] > 5 && styles.nutritionValueBad
+                      <View style={additionalStyles.nutritionItem}>
+                        <Text style={additionalStyles.nutritionLabel}>Saturated Fat</Text>
+                        <Text style={[additionalStyles.nutritionValue,
+                          productData.nutriments['saturated-fat_100g'] > 5 && additionalStyles.nutritionValueBad
                         ]}>{productData.nutriments['saturated-fat_100g'] || 0}g</Text>
                       </View>
-                      <View style={styles.nutritionItem}>
-                        <Text style={styles.nutritionLabel}>Protein</Text>
-                        <Text style={styles.nutritionValue}>{productData.nutriments['proteins_100g'] || 0}g</Text>
+                      <View style={additionalStyles.nutritionItem}>
+                        <Text style={additionalStyles.nutritionLabel}>Protein</Text>
+                        <Text style={additionalStyles.nutritionValue}>{productData.nutriments['proteins_100g'] || 0}g</Text>
                       </View>
-                      <View style={styles.nutritionItem}>
-                        <Text style={styles.nutritionLabel}>Fiber</Text>
-                        <Text style={styles.nutritionValue}>{productData.nutriments['fiber_100g'] || 0}g</Text>
+                      <View style={additionalStyles.nutritionItem}>
+                        <Text style={additionalStyles.nutritionLabel}>Fiber</Text>
+                        <Text style={additionalStyles.nutritionValue}>{productData.nutriments['fiber_100g'] || 0}g</Text>
                       </View>
-                      <View style={styles.nutritionItem}>
-                        <Text style={styles.nutritionLabel}>Salt</Text>
-                        <Text style={styles.nutritionValue}>{productData.nutriments['salt_100g'] || 0}g</Text>
+                      <View style={additionalStyles.nutritionItem}>
+                        <Text style={additionalStyles.nutritionLabel}>Salt</Text>
+                        <Text style={additionalStyles.nutritionValue}>{productData.nutriments['salt_100g'] || 0}g</Text>
                       </View>
                     </>
                   )}
                 </View>
  
                 {productData.serving_size && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionLabel}>Serving Size</Text>
-                    <Text style={styles.nutritionValue}>{productData.serving_size}</Text>
+                  <View style={additionalStyles.nutritionItem}>
+                    <Text style={additionalStyles.nutritionLabel}>Serving Size</Text>
+                    <Text style={additionalStyles.nutritionValue}>{productData.serving_size}</Text>
                   </View>
                 )}
 
                 {(productData.quantity || currentProduct.netQuantity) && (
-                  <View style={styles.nutritionItem}>
-                    <Text style={styles.nutritionLabel}>Container Size</Text>
-                    <Text style={styles.nutritionValue}>
+                  <View style={additionalStyles.nutritionItem}>
+                    <Text style={additionalStyles.nutritionLabel}>Container Size</Text>
+                    <Text style={additionalStyles.nutritionValue}>
                       {productData.quantity || currentProduct.netQuantity}
                     </Text>
                   </View>
@@ -280,6 +401,7 @@ const ResultsScreen = ({
               </View>
             )}
 
+            {/* Positive Aspects - unchanged */}
             {(currentProduct.positiveAttributes || currentProduct.positiveAspects) && 
              (currentProduct.positiveAttributes?.length > 0 || currentProduct.positiveAspects?.length > 0) && (
               <View style={styles.positiveSection}>
@@ -293,6 +415,7 @@ const ResultsScreen = ({
               </View>
             )}
 
+            {/* Health Warnings - unchanged */}
             {(currentProduct.healthScore?.warnings || currentProduct.warnings) && 
              (currentProduct.healthScore?.warnings?.length > 0 || currentProduct.warnings?.length > 0) && (
               <View style={styles.warningsContainer}>
@@ -320,45 +443,48 @@ const ResultsScreen = ({
               </View>
             )}
 
+            {/* Additives - unchanged */}
             {(currentProduct.additives && currentProduct.additives.length > 0) || 
              (productData.additives_tags && productData.additives_tags.length > 0) ? (
-              <View style={styles.additivesSection}>
+              <View style={additionalStyles.additivesSection}>
                 <Text style={styles.sectionTitle}>🧪 Additives Found</Text>
                 <View>
                   {currentProduct.additives && currentProduct.additives.length > 0 ? (
                     currentProduct.additives.map((additive, index) => (
-                      <Text key={index} style={styles.additiveItem}>
+                      <Text key={index} style={additionalStyles.additiveItem}>
                         • {additive.code} - {additive.name}
                         {additive.severity === 'high' && ' ⚠️'}
                       </Text>
                     ))
                   ) : (
                     productData.additives_tags.map((additive, index) => (
-                      <Text key={index} style={styles.additiveItem}>
+                      <Text key={index} style={additionalStyles.additiveItem}>
                         • {additive.replace('en:', '').toUpperCase()}
                       </Text>
                     ))
                   )}
                 </View>
                 {productData.additives_n && (
-                  <Text style={styles.additivesCount}>
+                  <Text style={additionalStyles.additivesCount}>
                     Total additives: {productData.additives_n}
                   </Text>
                 )}
               </View>
             ) : null}
 
+            {/* Ingredients - unchanged */}
             {productData.ingredients_text && (
-              <View style={styles.ingredientsSection}>
+              <View style={additionalStyles.ingredientsSection}>
                 <Text style={styles.sectionTitle}>📝 Ingredients</Text>
-                <Text style={styles.ingredientsText}>{productData.ingredients_text}</Text>
+                <Text style={additionalStyles.ingredientsText}>{productData.ingredients_text}</Text>
               </View>
             )}
 
+            {/* Processing Level - unchanged */}
             {productData.nova_group && (
-              <View style={styles.processingSection}>
+              <View style={additionalStyles.processingSection}>
                 <Text style={styles.sectionTitle}>🏭 Processing Level</Text>
-                <View style={[styles.novaGroupBadge, 
+                <View style={[additionalStyles.novaGroupBadge, 
                   { backgroundColor: 
                     productData.nova_group === '4' ? '#FEE2E2' :
                     productData.nova_group === '3' ? '#FED7AA' :
@@ -366,7 +492,7 @@ const ResultsScreen = ({
                     '#D1FAE5'
                   }
                 ]}>
-                  <Text style={styles.novaGroupText}>
+                  <Text style={additionalStyles.novaGroupText}>
                     NOVA Group {productData.nova_group}
                     {productData.nova_group === '4' && ' - Ultra-processed'}
                     {productData.nova_group === '3' && ' - Processed'}
@@ -377,8 +503,9 @@ const ResultsScreen = ({
               </View>
             )}
 
+            {/* Nutri-Score - unchanged */}
             {productData.nutrition_grades && (
-              <View style={styles.nutriScoreSection}>
+              <View style={additionalStyles.nutriScoreSection}>
                 <Text style={styles.sectionTitle}>🎯 Nutri-Score</Text>
                 <LinearGradient
                   colors={
@@ -388,15 +515,16 @@ const ResultsScreen = ({
                     productData.nutrition_grades === 'd' ? ['#EE8100', '#F39200'] :
                     ['#E63E11', '#ED5922']
                   }
-                  style={styles.nutriScoreBadge}
+                  style={additionalStyles.nutriScoreBadge}
                 >
-                  <Text style={styles.nutriScoreText}>
+                  <Text style={additionalStyles.nutriScoreText}>
                     Grade {productData.nutrition_grades.toUpperCase()}
                   </Text>
                 </LinearGradient>
               </View>
             )}
 
+            {/* Save/Share buttons - unchanged */}
             <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 20, paddingHorizontal: 15 }}>
               <TouchableOpacity
                 style={{ 
@@ -458,6 +586,7 @@ const ResultsScreen = ({
         </ScrollView>
       </ResponsiveContainer>
 
+      {/* ADHD Alert Modal - unchanged */}
       <AdhdAlertModal
         visible={showAdhdAlert}
         onClose={() => setShowAdhdAlert(false)}
@@ -469,7 +598,102 @@ const ResultsScreen = ({
   );
 };
 
+// ===== UPDATED STYLES WITH NEW ALLERGEN STYLES =====
 const additionalStyles = StyleSheet.create({
+  // ===== NEW: Advanced Allergen Styles =====
+  allergenAlertBox: {
+    backgroundColor: '#FEF2F2',
+    borderRadius: 16,
+    padding: 16,
+    marginHorizontal: 15,
+    marginVertical: 8,
+    borderWidth: 1,
+    borderColor: '#FCA5A5',
+  },
+  allergenHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  allergenIcon: {
+    fontSize: 24,
+    marginRight: 8,
+  },
+  allergenTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#991B1B',
+  },
+  allergenDescription: {
+    fontSize: 14,
+    color: '#7F1D1D',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  profileAllergenSection: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 8,
+  },
+  profileName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+    marginBottom: 8,
+  },
+  allergenItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingLeft: 8,
+  },
+  severityIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  allergenItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+  },
+  allergenItemSource: {
+    fontSize: 12,
+    color: '#6B7280',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  hiddenAllergenSection: {
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+  },
+  hiddenAllergenTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#92400E',
+    marginBottom: 6,
+  },
+  hiddenAllergenText: {
+    fontSize: 13,
+    color: '#78350F',
+    marginTop: 2,
+  },
+  upgradeButton: {
+    backgroundColor: '#8B5CF6',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  upgradeButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+
+  // ===== EXISTING STYLES (kept) =====
   servingSizeContainer: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -1,8 +1,10 @@
 // services/PremiumService.js
 // NutraDetective Premium Service - 3-Tier Subscription System
-// Version 2.0 - Free, Plus ($4.99), Pro ($9.99)
+// Version 3.0 - WITH REVENUCAT INTEGRATION
+// Free, Plus ($4.99), Pro ($9.99)
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import RevenueCatService from './RevenueCatService';
 
 // AsyncStorage Keys
 const PREMIUM_KEY = 'premiumStatus';
@@ -35,46 +37,94 @@ const TIER_LIMITS = {
 };
 
 /**
- * PremiumService - Manages 3-tier subscription system
+ * PremiumService - Manages 3-tier subscription system WITH RevenueCat
  * Free: 7 scans/day, 7-day history
  * Plus ($4.99/mo): 25 scans/day, 30-day history, ADHD alerts
  * Pro ($9.99/mo): Unlimited scans, unlimited history, family sharing
  */
 class PremiumService {
 
-  // ===== TIER MANAGEMENT =====
+  // ===== REVENUCAT INTEGRATION =====
 
   /**
-   * Get user's current subscription tier
-   * @returns {Promise<string>} 'free', 'plus', or 'pro'
+   * Initialize premium service and sync with RevenueCat
    */
-  static async getTier() {
+  static async initialize() {
+    try {
+      console.log('💳 Initializing PremiumService with RevenueCat...');
+      
+      // Sync with RevenueCat to get real subscription status
+      const tier = await this.syncWithRevenueCat();
+      
+      console.log('✅ PremiumService initialized. Tier:', tier.toUpperCase());
+      return tier;
+    } catch (error) {
+      console.error('❌ Error initializing PremiumService:', error);
+      // Fall back to cached tier
+      return await this.getCachedTier();
+    }
+  }
+
+  /**
+   * Sync with RevenueCat to get real subscription status
+   */
+  static async syncWithRevenueCat() {
+    try {
+      const customerInfo = await RevenueCatService.getCustomerInfo();
+      const status = RevenueCatService.getSubscriptionStatus(customerInfo);
+      
+      // Update local tier based on RevenueCat
+      const tier = status.tier;
+      const expiresAt = status.expirationDate ? new Date(status.expirationDate).getTime() : null;
+      
+      await this.setTier(tier, expiresAt);
+      
+      console.log('🔄 Synced with RevenueCat:', tier.toUpperCase());
+      return tier;
+    } catch (error) {
+      console.error('❌ RevenueCat sync failed:', error);
+      return await this.getCachedTier();
+    }
+  }
+
+  /**
+   * Get cached tier from AsyncStorage (offline fallback)
+   */
+  static async getCachedTier() {
     try {
       const premiumData = await AsyncStorage.getItem(PREMIUM_KEY);
       if (!premiumData) return TIERS.FREE;
 
       const data = JSON.parse(premiumData);
-
-      // Check if subscription expired
-      if (data.expiresAt) {
-        const now = new Date().getTime();
-        if (now > data.expiresAt) {
-          console.log('⏰ Subscription expired, reverting to Free tier');
-          await this.setTier(TIERS.FREE);
-          return TIERS.FREE;
-        }
-      }
-
+      
       // Validate tier
       if (!Object.values(TIERS).includes(data.tier)) {
-        console.log('⚠️ Invalid tier, defaulting to Free');
         return TIERS.FREE;
       }
 
       return data.tier;
     } catch (error) {
-      console.error('❌ Error getting tier:', error);
+      console.error('❌ Error getting cached tier:', error);
       return TIERS.FREE;
+    }
+  }
+
+  // ===== TIER MANAGEMENT =====
+
+  /**
+   * Get user's current subscription tier
+   * Checks RevenueCat first, falls back to cache
+   * @returns {Promise<string>} 'free', 'plus', or 'pro'
+   */
+  static async getTier() {
+    try {
+      // Try to sync with RevenueCat (online)
+      const tier = await this.syncWithRevenueCat();
+      return tier;
+    } catch (error) {
+      // Fall back to cached tier (offline)
+      console.log('⚠️ Using cached tier (offline mode)');
+      return await this.getCachedTier();
     }
   }
 
@@ -234,7 +284,7 @@ class PremiumService {
       };
     }
 
-    // Free tier: 5 scans/day
+    // Free tier: 7 scans/day
     const remaining = limits.scansPerDay - todayScans;
 
     if (remaining <= 0) {
@@ -242,7 +292,7 @@ class PremiumService {
         canScan: false,
         scansRemaining: 0,
         tier: TIERS.FREE,
-        message: 'Daily scan limit reached (5/5). Upgrade to Plus for 25 scans/day or Pro for unlimited!'
+        message: 'Daily scan limit reached (7/7). Upgrade to Plus for 25 scans/day or Pro for unlimited!'
       };
     }
 
@@ -377,7 +427,7 @@ class PremiumService {
   static async setTestFree() {
     await this.setTier(TIERS.FREE);
     await this.resetScanCounter();
-    console.log('🆓 Test tier set to FREE (5 scans/day, 7-day history)');
+    console.log('🆓 Test tier set to FREE (7 scans/day, 7-day history)');
     return await this.getStatus();
   }
 

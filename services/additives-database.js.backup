@@ -227,14 +227,6 @@ export const ADDITIVES_DATABASE = {
     description: 'Red color from tomatoes',
     healthImpact: 'Safe and potentially beneficial. Antioxidant properties.'
   },
-  'en:e160e': {
-    code: 'E160e',
-    name: 'Beta-apo-8\'-carotenal (Orange)',
-    category: 'color',
-    severity: 'low',
-    description: 'Orange food coloring derived from plants',
-    healthImpact: 'Generally recognized as safe. Natural source of vitamin A.'
-  },
   'en:e161b': {
     code: 'E161b',
     name: 'Lutein',
@@ -2852,52 +2844,46 @@ export const ADDITIVES_DATABASE = {
 };
 
 export function getAdditiveInfo(additiveCode) {
-  // ===== DEBUG LOGGING - START =====
-  console.log('🔍 getAdditiveInfo called with:', additiveCode);
-  console.log('   Type:', typeof additiveCode);
-  console.log('   Length:', additiveCode?.length);
-  // ===== DEBUG LOGGING - END =====
-  
   let searchKey = additiveCode.toLowerCase().trim();
-  console.log('🔑 Search key after toLowerCase/trim:', searchKey);
-  
-  // Handle generic placeholder codes (e.g., e14xx, e1xx)
-  if (searchKey.match(/^(en:)?e\d+x+$/i)) {
-    console.log('✅ MATCHED generic placeholder pattern');
-    const baseNumber = searchKey.match(/\d+/)[0];
-    
-    // E14XX = Modified Starches
-    if (baseNumber.startsWith('14')) {
-      console.log('✅ Returning Modified Starch generic');
-      return {
-        code: additiveCode.toUpperCase().replace('EN:', 'E'),
-        name: 'Modified Starch (type unspecified)',
-        category: 'thickener',
-        severity: 'low',
-        description: 'Generic modified starch - specific type not identified in product data',
-        healthImpact: 'Generally safe. Modified starches are commonly used as thickeners.'
-      };
-    }
-  }
   
   // Try direct lookup first
-  console.log('🔍 Trying direct lookup:', searchKey);
   if (ADDITIVES_DATABASE[searchKey]) {
-    console.log('✅ Found via direct lookup');
     return ADDITIVES_DATABASE[searchKey];
   }
   
   // Try with 'en:' prefix
   if (!searchKey.startsWith('en:')) {
     searchKey = 'en:' + searchKey;
-    console.log('🔍 Trying with en: prefix:', searchKey);
     if (ADDITIVES_DATABASE[searchKey]) {
-      console.log('✅ Found via en: prefix');
       return ADDITIVES_DATABASE[searchKey];
     }
   }
   
-  console.log('❌ Not found in database, returning unknown');
+  // Extract base code without letter suffix (e322i -> e322)
+  const baseMatch = searchKey.match(/^(en:)?e(\d+)[a-z]*$/i);
+  if (baseMatch) {
+    const baseCode = (baseMatch[1] || 'en:') + 'e' + baseMatch[2];
+    if (ADDITIVES_DATABASE[baseCode]) {
+      // Found base additive, return it with variant notation
+      const baseInfo = ADDITIVES_DATABASE[baseCode];
+      return {
+        ...baseInfo,
+        code: additiveCode.toUpperCase().replace('EN:', 'E'),
+        name: `${baseInfo.name} (variant)`,
+      };
+    }
+  }
+  
+  // Try without 'en:' prefix
+  if (searchKey.startsWith('en:')) {
+    const withoutPrefix = searchKey.substring(3);
+    // Try to find by code number
+    for (const key in ADDITIVES_DATABASE) {
+      if (ADDITIVES_DATABASE[key].code.toLowerCase() === withoutPrefix) {
+        return ADDITIVES_DATABASE[key];
+      }
+    }
+  }
   
   // Return unknown additive info
   return {
