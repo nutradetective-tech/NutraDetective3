@@ -54,6 +54,31 @@ const BottomNav = ({ activeTab, setActiveTab }) => {
         </Text>
       </TouchableOpacity>
 
+      {/* NEW: Alerts Tab */}
+      <TouchableOpacity 
+        style={[styles.navItem, activeTab === 'alerts' && styles.navItemActive]}
+        onPress={() => setActiveTab('alerts')}
+      >
+        {activeTab === 'alerts' && (
+          <LinearGradient
+            colors={['#667EEA', '#764BA2']}
+            style={styles.navActiveIndicator}
+          />
+        )}
+        <Text style={[
+          styles.navIcon, 
+          activeTab === 'alerts' && styles.navIconActive
+        ]}>
+          🚨
+        </Text>
+        <Text style={[
+          styles.navLabel, 
+          activeTab === 'alerts' && styles.navLabelActive
+        ]}>
+          Alerts
+        </Text>
+      </TouchableOpacity>
+
       <TouchableOpacity 
         style={[styles.navItem, activeTab === 'profile' && styles.navItemActive]}
         onPress={() => setActiveTab('profile')}

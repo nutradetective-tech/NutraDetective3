@@ -16,6 +16,7 @@ import {
   Platform,
   TextInput,
 } from 'react-native';
+import RecallFeedScreen from './screens/RecallFeedScreen';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import ImagePickerTest from './components/ImagePickerTest';
 import PremiumService from './services/PremiumService';
@@ -503,7 +504,7 @@ try {
         styles={styles}
         setShowUpgradeModal={setShowUpgradeModal}
         setUpgradeReason={setUpgradeReason}
-         handleBarcodeScan={handleBarcodeScan}
+        handleBarcodeScan={handleBarcodeScan}
       />
     );
   }
@@ -518,6 +519,11 @@ try {
         styles={styles}
       />
     );
+  }
+
+  // ===== NEW: ALERTS TAB =====
+  if (activeTab === 'alerts') {
+    return <RecallFeedScreen />;
   }
 
   if (activeTab === 'profile') {
@@ -569,18 +575,18 @@ try {
         />
 
         <UpgradeModal
-  visible={showUpgradeModal}
-  onClose={() => setShowUpgradeModal(false)}
-  onUpgrade={(selectedTier, billingPeriod) => {
-    setShowUpgradeModal(false);
-    Alert.alert(
-      'Coming Soon!',
-      `Payment integration coming soon!\n\nYou selected:\n• ${selectedTier.toUpperCase()} tier\n• ${billingPeriod === 'annual' ? 'Annual' : 'Monthly'} billing\n\nFor now, go to Profile to toggle premium for testing.`,
-      [{ text: 'OK' }]
-    );
-  }}
-  reason={upgradeReason}
-/>
+          visible={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+          onUpgrade={(selectedTier, billingPeriod) => {
+            setShowUpgradeModal(false);
+            Alert.alert(
+              'Coming Soon!',
+              `Payment integration coming soon!\n\nYou selected:\n• ${selectedTier.toUpperCase()} tier\n• ${billingPeriod === 'annual' ? 'Annual' : 'Monthly'} billing\n\nFor now, go to Profile to toggle premium for testing.`,
+              [{ text: 'OK' }]
+            );
+          }}
+          reason={upgradeReason}
+        />
       </SafeAreaView>
     </SafeAreaProvider>
   );
