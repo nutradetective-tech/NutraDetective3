@@ -1,6 +1,6 @@
 // services/PremiumService.js
 // NutraDetective Premium Service - 3-Tier Subscription System
-// Version 3.0 - WITH REVENUCAT INTEGRATION
+// Version 3.1 - WITH REVENUCAT INTEGRATION + TEST MODE FIX
 // Free, Plus ($4.99), Pro ($9.99)
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,6 +9,7 @@ import RevenueCatService from './RevenueCatService';
 // AsyncStorage Keys
 const PREMIUM_KEY = 'premiumStatus';
 const SCAN_COUNTER_KEY = 'scanCounter';
+const TEST_MODE_KEY = 'testMode'; // NEW: Track if in test mode
 
 // Subscription Tiers
 const TIERS = {
@@ -44,6 +45,46 @@ const TIER_LIMITS = {
  */
 class PremiumService {
 
+  // ===== TEST MODE MANAGEMENT =====
+
+  /**
+   * Check if in test mode
+   */
+  static async isTestMode() {
+    try {
+      const testMode = await AsyncStorage.getItem(TEST_MODE_KEY);
+      return testMode === 'true';
+    } catch (error) {
+      return false;
+    }
+  }
+
+  /**
+   * Enable test mode (bypasses RevenueCat)
+   */
+  static async enableTestMode() {
+    try {
+      await AsyncStorage.setItem(TEST_MODE_KEY, 'true');
+      console.log('🧪 Test mode ENABLED - RevenueCat sync disabled');
+    } catch (error) {
+      console.error('❌ Error enabling test mode:', error);
+    }
+  }
+
+  /**
+   * Disable test mode (re-enables RevenueCat)
+   */
+  static async disableTestMode() {
+    try {
+      await AsyncStorage.removeItem(TEST_MODE_KEY);
+      console.log('✅ Test mode DISABLED - RevenueCat sync enabled');
+      // Immediately sync with RevenueCat
+      await this.syncWithRevenueCat();
+    } catch (error) {
+      console.error('❌ Error disabling test mode:', error);
+    }
+  }
+
   // ===== REVENUCAT INTEGRATION =====
 
   /**
@@ -52,10 +93,19 @@ class PremiumService {
   static async initialize() {
     try {
       console.log('💳 Initializing PremiumService with RevenueCat...');
-      
+
+      // Check if in test mode
+      const inTestMode = await this.isTestMode();
+      if (inTestMode) {
+        console.log('🧪 In test mode - skipping RevenueCat sync');
+        const tier = await this.getCachedTier();
+        console.log('✅ PremiumService initialized (TEST MODE). Tier:', tier.toUpperCase());
+        return tier;
+      }
+
       // Sync with RevenueCat to get real subscription status
       const tier = await this.syncWithRevenueCat();
-      
+
       console.log('✅ PremiumService initialized. Tier:', tier.toUpperCase());
       return tier;
     } catch (error) {
@@ -70,15 +120,22 @@ class PremiumService {
    */
   static async syncWithRevenueCat() {
     try {
+      // Skip if in test mode
+      const inTestMode = await this.isTestMode();
+      if (inTestMode) {
+        console.log('🧪 Test mode active - skipping RevenueCat sync');
+        return await this.getCachedTier();
+      }
+
       const customerInfo = await RevenueCatService.getCustomerInfo();
       const status = RevenueCatService.getSubscriptionStatus(customerInfo);
-      
+
       // Update local tier based on RevenueCat
       const tier = status.tier;
       const expiresAt = status.expirationDate ? new Date(status.expirationDate).getTime() : null;
-      
+
       await this.setTier(tier, expiresAt);
-      
+
       console.log('🔄 Synced with RevenueCat:', tier.toUpperCase());
       return tier;
     } catch (error) {
@@ -96,7 +153,7 @@ class PremiumService {
       if (!premiumData) return TIERS.FREE;
 
       const data = JSON.parse(premiumData);
-      
+
       // Validate tier
       if (!Object.values(TIERS).includes(data.tier)) {
         return TIERS.FREE;
@@ -113,12 +170,19 @@ class PremiumService {
 
   /**
    * Get user's current subscription tier
-   * Checks RevenueCat first, falls back to cache
+   * Checks RevenueCat first (unless in test mode), falls back to cache
    * @returns {Promise<string>} 'free', 'plus', or 'pro'
    */
   static async getTier() {
     try {
-      // Try to sync with RevenueCat (online)
+      // Check if in test mode
+      const inTestMode = await this.isTestMode();
+      if (inTestMode) {
+        // In test mode: just return cached tier, don't sync
+        return await this.getCachedTier();
+      }
+
+      // Not in test mode: try to sync with RevenueCat
       const tier = await this.syncWithRevenueCat();
       return tier;
     } catch (error) {
@@ -266,7 +330,7 @@ class PremiumService {
     // Plus tier: 25 scans/day
     if (tier === TIERS.PLUS) {
       const remaining = limits.scansPerDay - todayScans;
-      
+
       if (remaining <= 0) {
         return {
           canScan: false,
@@ -425,6 +489,7 @@ class PremiumService {
    * FOR TESTING: Set tier to Free
    */
   static async setTestFree() {
+    await this.enableTestMode(); // Enable test mode
     await this.setTier(TIERS.FREE);
     await this.resetScanCounter();
     console.log('🆓 Test tier set to FREE (7 scans/day, 7-day history)');
@@ -435,11 +500,12 @@ class PremiumService {
    * FOR TESTING: Set tier to Plus ($4.99/mo)
    */
   static async setTestPlus(daysValid = 30) {
+    await this.enableTestMode(); // Enable test mode
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + daysValid);
     await this.setTier(TIERS.PLUS, expiresAt.getTime());
     await this.resetScanCounter();
-    console.log(`✨ Test tier set to PLUS (25 scans/day, 30-day history, ${daysValid} days)`);
+    console.log(`⭐ Test tier set to PLUS (25 scans/day, 30-day history, ${daysValid} days)`);
     return await this.getStatus();
   }
 
@@ -447,11 +513,12 @@ class PremiumService {
    * FOR TESTING: Set tier to Pro ($9.99/mo)
    */
   static async setTestPro(daysValid = 30) {
+    await this.enableTestMode(); // Enable test mode
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + daysValid);
     await this.setTier(TIERS.PRO, expiresAt.getTime());
     await this.resetScanCounter();
-    console.log(`🚀 Test tier set to PRO (unlimited scans, unlimited history, ${daysValid} days)`);
+    console.log(`👑 Test tier set to PRO (unlimited scans, unlimited history, ${daysValid} days)`);
     return await this.getStatus();
   }
 
@@ -462,7 +529,7 @@ class PremiumService {
     try {
       const today = new Date().toDateString();
       const currentCount = await this.getTodayScans();
-      
+
       const data = {
         count: currentCount + count,
         date: today,
@@ -485,6 +552,7 @@ class PremiumService {
     try {
       await AsyncStorage.removeItem(PREMIUM_KEY);
       await AsyncStorage.removeItem(SCAN_COUNTER_KEY);
+      await AsyncStorage.removeItem(TEST_MODE_KEY);
       console.log('🧹 All premium data cleared');
       return true;
     } catch (error) {
@@ -498,9 +566,14 @@ class PremiumService {
    */
   static async logStatus() {
     const status = await this.getStatus();
-    console.log('═══════════════════════════════════════');
+    const inTestMode = await this.isTestMode();
+    
+    console.log('╔═══════════════════════════════════════╗');
     console.log('📊 NUTRADETECTIVE PREMIUM STATUS');
-    console.log('═══════════════════════════════════════');
+    if (inTestMode) {
+      console.log('🧪 TEST MODE ACTIVE');
+    }
+    console.log('╠═══════════════════════════════════════╣');
     console.log(`Tier: ${status.tierName.toUpperCase()}`);
     console.log(`Today's Scans: ${status.todayScans}${status.scanLimit === -1 ? ' (unlimited)' : `/${status.scanLimit}`}`);
     console.log(`Scans Remaining: ${status.scansRemaining === -1 ? 'Unlimited' : status.scansRemaining}`);
@@ -509,9 +582,9 @@ class PremiumService {
     console.log(`ADHD Alerts: ${status.hasAdhdAlerts ? '✅' : '❌'}`);
     console.log(`Advanced Allergens: ${status.hasAdvancedAllergens ? '✅' : '❌'}`);
     console.log(`Family Sharing: ${status.hasFamilySharing ? '✅' : '❌'}`);
-    console.log('═══════════════════════════════════════');
+    console.log('╠═══════════════════════════════════════╣');
     console.log(`Message: ${status.message}`);
-    console.log('═══════════════════════════════════════');
+    console.log('╚═══════════════════════════════════════╝');
     return status;
   }
 }

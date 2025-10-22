@@ -155,6 +155,42 @@ useEffect(() => {
 
     initializeRevenueCat();
 
+    initializeRevenueCat();
+
+    // TEMPORARY: Clear product cache to see scoring logs
+    const clearProductCache = async () => {
+      try {
+        const keys = await AsyncStorage.getAllKeys();
+        const productKeys = keys.filter(k => k.startsWith('product_cache_'));
+        if (productKeys.length > 0) {
+          await AsyncStorage.multiRemove(productKeys);
+          console.log('🗑️ CLEARED', productKeys.length, 'CACHED PRODUCTS');
+        }
+      } catch (error) {
+  console.log('Cache clear error:', error);
+}
+
+// 🔥 CLEAR ALTERNATIVES CACHE
+try {
+  const altKeys = keys.filter(k => k.startsWith('alternatives_'));
+  if (altKeys.length > 0) {
+    await AsyncStorage.multiRemove(altKeys);
+    console.log('🗑️ CLEARED', altKeys.length, 'CACHED ALTERNATIVES');
+  }
+} catch (error) {
+  console.log('Alt cache clear error:', error);
+}
+    };  // ← MAKE SURE THIS CLOSING BRACE AND SEMICOLON ARE HERE!
+    clearProductCache();
+
+    
+
+    Animated.timing(splashFadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
+
     Animated.timing(splashFadeAnim, {
       toValue: 1,
       duration: 500,
@@ -467,6 +503,7 @@ useEffect(() => {
         styles={styles}
         setShowUpgradeModal={setShowUpgradeModal}
         setUpgradeReason={setUpgradeReason}
+         handleBarcodeScan={handleBarcodeScan}
       />
     );
   }

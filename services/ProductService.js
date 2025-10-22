@@ -104,17 +104,31 @@ class ProductService {
       const cachedData = await AsyncStorage.getItem(cacheKey);
       
       if (cachedData) {
-        const cached = JSON.parse(cachedData);
-        const cacheAge = Date.now() - new Date(cached.cachedAt).getTime();
-        const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
-        
-        if (cacheAge < maxAge) {
-          console.log('✅ Using cached product data (age: ' + Math.round(cacheAge / (24 * 60 * 60 * 1000)) + ' days)');
-          return cached.product;
-        } else {
-          console.log('⚠️ Cache expired, fetching fresh data');
-        }
-      }
+  const cached = JSON.parse(cachedData);
+  const cacheAge = Date.now() - new Date(cached.cachedAt).getTime();
+  const maxAge = 30 * 24 * 60 * 60 * 1000; // 30 days
+  
+  if (cacheAge < maxAge) {
+    console.log('✅ Using cached product data (age: ' + Math.round(cacheAge / (24 * 60 * 60 * 1000)) + ' days)');
+    
+    // LOG CACHED SCORE
+    console.log('');
+    console.log('══════════════════════════════════════════════════════════');
+    console.log('📊 CACHED PRODUCT SCORE');
+    console.log('══════════════════════════════════════════════════════════');
+    console.log('📦 Product:', cached.product.name);
+    console.log('🎯 Grade:', cached.product.healthScore?.grade);
+    console.log('📊 Score:', cached.product.healthScore?.score + '/100');
+    console.log('📝 Status:', cached.product.healthScore?.status);
+    console.log('⚠️  Warnings:', cached.product.healthScore?.warnings?.length || 0);
+    console.log('══════════════════════════════════════════════════════════');
+    console.log('');
+    
+    return cached.product;
+  } else {
+    console.log('⚠️ Cache expired, fetching fresh data');
+  }
+}
     } catch (error) {
       console.log('Cache read error:', error);
     }
@@ -262,7 +276,7 @@ class ProductService {
 
     // Process the product if found
     if (product) {
-      // CHECK IF WE HAVE SUFFICIENT DATA TO SCORE
+  // CHECK IF WE HAVE SUFFICIENT DATA TO SCORE
       const hasIngredients = !!(
         product.ingredients_text && 
         product.ingredients_text.trim().length > 10
@@ -274,17 +288,32 @@ class ProductService {
         product.nutriments['sodium_100g'] !== undefined
       );
       
-      // Log what we have for debugging
-      console.log('📋 Product data check:', {
-        name: product.product_name,
-        hasIngredients,
-        hasNutritionData,
-        source: source
-      });
+      // DETAILED DEBUG LOGGING
+      console.log('');
+      console.log('══════════════════════════════════════════════════════════');
+      console.log('DEBUG: DATA SUFFICIENCY CHECK');
+      console.log('══════════════════════════════════════════════════════════');
+      console.log('Product Name:', product.product_name || 'UNKNOWN');
+      console.log('Has Ingredients:', hasIngredients);
+      console.log('Ingredients text:', product.ingredients_text || 'NONE');
+      console.log('Ingredients length:', (product.ingredients_text || '').length);
+      console.log('');
+      console.log('Has Nutrition Data:', hasNutritionData);
+      console.log('Sugar (sugars_100g):', product.nutriments?.['sugars_100g']);
+      console.log('Sodium (sodium_100g):', product.nutriments?.['sodium_100g']);
+      console.log('Energy (energy-kcal_100g):', product.nutriments?.['energy-kcal_100g']);
+      console.log('');
+      console.log('All nutriments keys:', Object.keys(product.nutriments || {}));
+      console.log('══════════════════════════════════════════════════════════');
+      console.log('');
       
       // If missing critical data, return with "insufficient data" status
       if (!hasIngredients || !hasNutritionData) {
-        console.log('⚠️ Insufficient data for scoring');
+        console.log('🚫 EARLY RETURN: Product has insufficient data for scoring');
+        console.log('   Missing:', !hasIngredients ? 'INGREDIENTS' : 'NUTRITION DATA');
+        console.log('   Will return grade "?" with insufficient data message');
+        console.log('');
+        
         return {
           name: product.product_name || 'Unknown Product',
           brand: product.brands || 'Unknown Brand',
@@ -306,9 +335,14 @@ class ProductService {
       }
       
       // We have enough data - calculate health score
-      console.log('📊 Calculating health score...');
+      console.log('✅ Product has sufficient data - proceeding to scoring...');
+      console.log('');
+      
       const healthScore = this.calculateHealthScore(product);
-      console.log('✅ Final grade:', healthScore.grade, 'Score:', healthScore.score);
+      
+      console.log('');
+      console.log('✅ Scoring complete! Final grade:', healthScore.grade, 'Score:', healthScore.score);
+      console.log('');
       
       // Process additives with detailed information
       console.log('Additives tags:', product.additives_tags);
@@ -1478,10 +1512,22 @@ class ProductService {
     return 'info';
   }
 
-  /**
-   * Main scoring algorithm
+/**
+   * Main scoring algorithm - WITH COMPLETE LOGGING
    */
   static calculateHealthScore(product) {
+    // ========================================
+    // 📊 START SCORING LOG
+    // ========================================
+    console.log('');
+    console.log('══════════════════════════════════════════════════════════');
+    console.log('📊 PRODUCT HEALTH SCORING - COMPLETE BREAKDOWN');
+    console.log('══════════════════════════════════════════════════════════');
+    console.log('📦 Product:', product.product_name || 'Unknown');
+    console.log('🏷️  Brand:', product.brands || 'Unknown');
+    console.log('🔢 Barcode:', product.code || 'N/A');
+    console.log('');
+    
     let score = 100;
     const warnings = [];
     
@@ -1490,29 +1536,58 @@ class ProductService {
     const isLiquid = this.isProductLiquid(product);
     const unit = isLiquid ? '100ml' : '100g';
     
+    console.log('📊 NUTRITION DATA (per', unit + '):');
+    console.log('──────────────────────────────────────────────────────────');
+    
     const sugar = nutriments['sugars_100g'] || 0;
     const saturatedFat = nutriments['saturated-fat_100g'] || 0;
     const sodium = nutriments['sodium_100g'] || 0;
     const fiber = nutriments['fiber_100g'] || 0;
     const proteins = nutriments['proteins_100g'] || 0;
     const energy = nutriments['energy-kcal_100g'] || 0;
+    const carbs = nutriments['carbohydrates_100g'] || 0;
+    const fat = nutriments['fat_100g'] || 0;
     
+    console.log('  Energy:         ', energy.toFixed(1), 'kcal');
+    console.log('  Carbohydrates:  ', carbs.toFixed(1), 'g');
+    console.log('  - Sugar:        ', sugar.toFixed(1), 'g', sugar > 10 ? '⚠️ HIGH' : '');
+    console.log('  Fat:            ', fat.toFixed(1), 'g');
+    console.log('  - Saturated:    ', saturatedFat.toFixed(1), 'g', saturatedFat > 5 ? '⚠️ HIGH' : '');
+    console.log('  Protein:        ', proteins.toFixed(1), 'g', proteins > 10 ? '✅ GOOD' : '');
+    console.log('  Fiber:          ', fiber.toFixed(1), 'g', fiber > 3 ? '✅ GOOD' : '');
+    console.log('  Sodium:         ', sodium.toFixed(0), 'mg', sodium > 400 ? '⚠️ HIGH' : '');
+    console.log('  Product Type:   ', isLiquid ? 'LIQUID' : 'SOLID');
+    console.log('');
+    
+    // Safety override check
     let isSafetyOverride = false;
     if (sugar > 30 || saturatedFat > 10) {
-      console.log('⚠️ SAFETY OVERRIDE: Extreme sugar or fat detected');
-      console.log(`Sugar: ${sugar}g, Saturated Fat: ${saturatedFat}g`);
+      console.log('🚨 SAFETY OVERRIDE TRIGGERED:');
+      console.log('   Sugar:', sugar.toFixed(1), 'g', sugar > 30 ? '(EXTREME)' : '');
+      console.log('   Sat Fat:', saturatedFat.toFixed(1), 'g', saturatedFat > 10 ? '(EXTREME)' : '');
+      console.log('   Score will be capped at 30 (D- grade)');
+      console.log('');
       isSafetyOverride = true;
     }
 
     const ingredients = (product.ingredients_text || '').toLowerCase();
     const ingredientsList = product.ingredients || [];
     
+    // Check if low-calorie product (different scoring)
     const isLowCalorieProduct = energy < 10;
     if (isLowCalorieProduct && ingredientsList.length < 10 && sodium < 500) {
+      console.log('🔍 SPECIAL CASE: Low-calorie condiment/seasoning detected');
+      console.log('   Using simplified scoring algorithm');
+      console.log('');
+      
       score = 85;
+      console.log('📊 SCORING BREAKDOWN:');
+      console.log('──────────────────────────────────────────────────────────');
+      console.log('  Starting Score:     85 (low-calorie base)');
       
       if (sodium > 1000) {
         score -= 20;
+        console.log('  Sodium Penalty:    -20 (high sodium for condiment)');
         warnings.push({
           title: 'High Sodium for Condiment',
           description: `${sodium.toFixed(0)}mg per ${unit}`,
@@ -1522,13 +1597,18 @@ class ProductService {
       
       if (ingredients.includes('organic')) {
         score += 10;
+        console.log('  Organic Bonus:     +10');
       }
       
       const additiveCheck = this.checkHarmfulAdditives(product);
       score -= additiveCheck.penalty;
+      console.log('  Additive Penalty:  -' + additiveCheck.penalty, '(' + additiveCheck.warnings.length + ' harmful ingredients)');
       warnings.push(...additiveCheck.warnings);
       
       score = Math.max(0, Math.min(100, score));
+      console.log('──────────────────────────────────────────────────────────');
+      console.log('  FINAL SCORE:       ', score);
+      console.log('');
       
       let grade, status;
       if (score >= 90) {
@@ -1569,6 +1649,12 @@ class ProductService {
         status = 'Avoid - Serious Health Concerns';
       }
       
+      console.log('🎯 FINAL GRADE:       ', grade);
+      console.log('📝 STATUS:            ', status);
+      console.log('⚠️  WARNINGS:          ', warnings.length);
+      console.log('══════════════════════════════════════════════════════════');
+      console.log('');
+      
       return {
         score: Math.round(score),
         grade: grade,
@@ -1577,6 +1663,14 @@ class ProductService {
       };
     }
     
+    // ========================================
+    // 🔢 MAIN SCORING ALGORITHM
+    // ========================================
+    
+    console.log('🧮 SCORE CALCULATION:');
+    console.log('──────────────────────────────────────────────────────────');
+    
+    // Starting score
     if (product.nutriscore_grade) {
       const nutriScoreMap = {
         'a': 100, 'b': 85, 'c': 70, 'd': 55, 'e': 40
@@ -1584,12 +1678,22 @@ class ProductService {
       const grade = product.nutriscore_grade.toLowerCase();
       if (nutriScoreMap[grade] !== undefined) {
         score = nutriScoreMap[grade];
+        console.log('  Base Score (Nutri-Score', grade.toUpperCase() + '):  ', score);
       }
+    } else {
+      console.log('  Base Score (default):     100');
     }
     
+    console.log('');
+    console.log('📉 PENALTIES:');
+    console.log('──────────────────────────────────────────────────────────');
+    
+    // NOVA Level penalty
     const novaLevel = this.getNOVALevel(product);
+    console.log('  NOVA Processing Level:    ', novaLevel);
     if (novaLevel === 4) {
       score -= 20;
+      console.log('  NOVA Penalty:            -20 (ultra-processed)');
       warnings.push({
         title: 'Ultra-Processed Food',
         description: 'Linked to 29% increased mortality risk (BMJ 2019)',
@@ -1597,6 +1701,7 @@ class ProductService {
       });
     } else if (novaLevel === 3) {
       score -= 10;
+      console.log('  NOVA Penalty:            -10 (processed)');
       warnings.push({
         title: 'Processed Food',
         description: 'Contains added ingredients for flavor and preservation',
@@ -1604,11 +1709,18 @@ class ProductService {
       });
     } else if (novaLevel === 2) {
       score -= 5;
+      console.log('  NOVA Penalty:             -5 (processed ingredients)');
+    } else {
+      console.log('  NOVA Penalty:              0 (unprocessed)');
     }
     
+    // Sugar penalties
+    console.log('');
+    console.log('  Sugar Analysis:');
     if (isLiquid) {
       if (sugar > 10) {
         score -= 35;
+        console.log('    Penalty:               -35 (EXTREME sugar for liquid)');
         warnings.push({
           title: `Extreme Sugar Content`,
           description: `${sugar.toFixed(1)}g per ${unit} - exceeds WHO daily limit in one serving!`,
@@ -1616,6 +1728,7 @@ class ProductService {
         });
       } else if (sugar > 8) {
         score -= 25;
+        console.log('    Penalty:               -25 (very high sugar)');
         warnings.push({
           title: `Very High Sugar`,
           description: `${sugar.toFixed(1)}g per ${unit} - UK sugar tax tier 2`,
@@ -1623,6 +1736,7 @@ class ProductService {
         });
       } else if (sugar > 5) {
         score -= 15;
+        console.log('    Penalty:               -15 (high sugar)');
         warnings.push({
           title: `High Sugar`,
           description: `${sugar.toFixed(1)}g per ${unit} - UK sugar tax tier 1`,
@@ -1630,15 +1744,19 @@ class ProductService {
         });
       } else if (sugar > 2.5) {
         score -= 5;
+        console.log('    Penalty:                -5 (moderate sugar)');
         warnings.push({
           title: `Moderate Sugar`,
           description: `${sugar.toFixed(1)}g per ${unit}`,
           severity: 'low'
         });
+      } else {
+        console.log('    Penalty:                 0 (acceptable sugar)');
       }
     } else {
       if (sugar > 22.5) {
         score -= 40;
+        console.log('    Penalty:               -40 (EXTREME sugar)');
         warnings.push({
           title: `Extreme Sugar Content`,
           description: `${sugar.toFixed(1)}g per ${unit} - major health risk!`,
@@ -1646,6 +1764,7 @@ class ProductService {
         });
       } else if (sugar > 15) {
         score -= 30;
+        console.log('    Penalty:               -30 (very high sugar)');
         warnings.push({
           title: `Very High Sugar`,
           description: `${sugar.toFixed(1)}g per ${unit} - exceeds UK "high sugar" threshold`,
@@ -1653,6 +1772,7 @@ class ProductService {
         });
       } else if (sugar > 10) {
         score -= 20;
+        console.log('    Penalty:               -20 (high sugar)');
         warnings.push({
           title: `High Sugar`,
           description: `${sugar.toFixed(1)}g per ${unit} - exceeds WHO recommendation`,
@@ -1660,17 +1780,24 @@ class ProductService {
         });
       } else if (sugar > 5) {
         score -= 10;
+        console.log('    Penalty:               -10 (moderate sugar)');
         warnings.push({
           title: `Moderate Sugar`,
           description: `${sugar.toFixed(1)}g per ${unit}`,
           severity: 'low'
         });
+      } else {
+        console.log('    Penalty:                 0 (acceptable sugar)');
       }
     }
     
+    // Sodium penalties
+    console.log('');
+    console.log('  Sodium Analysis:');
     if (isLiquid) {
       if (sodium > 200) {
         score -= 20;
+        console.log('    Penalty:               -20 (very high sodium for liquid)');
         warnings.push({
           title: `Very High Sodium`,
           description: `${sodium.toFixed(0)}mg per ${unit} - significant health concern`,
@@ -1678,6 +1805,7 @@ class ProductService {
         });
       } else if (sodium > 140) {
         score -= 10;
+        console.log('    Penalty:               -10 (high sodium)');
         warnings.push({
           title: `High Sodium`,
           description: `${sodium.toFixed(0)}mg per ${unit}`,
@@ -1685,15 +1813,19 @@ class ProductService {
         });
       } else if (sodium > 40) {
         score -= 5;
+        console.log('    Penalty:                -5 (moderate sodium)');
         warnings.push({
           title: `Moderate Sodium`,
           description: `${sodium.toFixed(0)}mg per ${unit}`,
           severity: 'low'
         });
+      } else {
+        console.log('    Penalty:                 0 (acceptable sodium)');
       }
     } else {
       if (sodium > 1000) {
         score -= 35;
+        console.log('    Penalty:               -35 (EXTREME sodium)');
         warnings.push({
           title: `Extreme Sodium`,
           description: `${sodium.toFixed(0)}mg per ${unit} - major cardiovascular risk!`,
@@ -1701,6 +1833,7 @@ class ProductService {
         });
       } else if (sodium > 600) {
         score -= 25;
+        console.log('    Penalty:               -25 (very high sodium)');
         warnings.push({
           title: `Very High Sodium`,
           description: `${sodium.toFixed(0)}mg per ${unit} - exceeds EU threshold`,
@@ -1708,6 +1841,7 @@ class ProductService {
         });
       } else if (sodium > 400) {
         score -= 15;
+        console.log('    Penalty:               -15 (high sodium)');
         warnings.push({
           title: `High Sodium`,
           description: `${sodium.toFixed(0)}mg per ${unit} - FDA "high sodium"`,
@@ -1715,17 +1849,24 @@ class ProductService {
         });
       } else if (sodium > 140) {
         score -= 5;
+        console.log('    Penalty:                -5 (moderate sodium)');
         warnings.push({
           title: `Moderate Sodium`,
           description: `${sodium.toFixed(0)}mg per ${unit}`,
           severity: 'low'
         });
+      } else {
+        console.log('    Penalty:                 0 (acceptable sodium)');
       }
     }
     
+    // Saturated fat penalties
+    console.log('');
+    console.log('  Saturated Fat Analysis:');
     if (!isLiquid && saturatedFat > 0) {
       if (saturatedFat > 10) {
         score -= 35;
+        console.log('    Penalty:               -35 (EXTREME saturated fat)');
         warnings.push({
           title: `Extreme Saturated Fat`,
           description: `${saturatedFat.toFixed(1)}g per ${unit} - major cardiovascular risk!`,
@@ -1733,6 +1874,7 @@ class ProductService {
         });
       } else if (saturatedFat > 5) {
         score -= 25;
+        console.log('    Penalty:               -25 (very high saturated fat)');
         warnings.push({
           title: `Very High Saturated Fat`,
           description: `${saturatedFat.toFixed(1)}g per ${unit} - exceeds 25% daily value`,
@@ -1740,6 +1882,7 @@ class ProductService {
         });
       } else if (saturatedFat > 3) {
         score -= 15;
+        console.log('    Penalty:               -15 (high saturated fat)');
         warnings.push({
           title: `High Saturated Fat`,
           description: `${saturatedFat.toFixed(1)}g per ${unit} - EU "high saturated fat"`,
@@ -1747,48 +1890,78 @@ class ProductService {
         });
       } else if (saturatedFat > 1.5) {
         score -= 5;
+        console.log('    Penalty:                -5 (moderate saturated fat)');
         warnings.push({
           title: `Moderate Saturated Fat`,
           description: `${saturatedFat.toFixed(1)}g per ${unit}`,
           severity: 'low'
         });
+      } else {
+        console.log('    Penalty:                 0 (acceptable saturated fat)');
       }
+    } else {
+      console.log('    Penalty:                 0 (liquid or no saturated fat)');
     }
     
+    // Harmful additives
+    console.log('');
+    console.log('  Checking Harmful Additives...');
     const additiveCheck = this.checkHarmfulAdditives(product);
     score -= additiveCheck.penalty;
+    console.log('    Additives Found:        ', additiveCheck.warnings.length);
+    console.log('    Additive Penalty:      -' + additiveCheck.penalty);
     warnings.push(...additiveCheck.warnings);
     
+    // Bonuses
+    console.log('');
+    console.log('📈 BONUSES:');
+    console.log('──────────────────────────────────────────────────────────');
     let bonusPoints = 0;
     
     if (fiber > 6) {
       bonusPoints += 8;
+      console.log('  Fiber (high):             +8');
     } else if (fiber > 3) {
       bonusPoints += 4;
+      console.log('  Fiber (good):             +4');
+    } else {
+      console.log('  Fiber:                     0');
     }
     
     if (proteins > 10) {
       bonusPoints += 7;
+      console.log('  Protein (high):           +7');
     } else if (proteins > 5) {
       bonusPoints += 3;
+      console.log('  Protein (good):           +3');
+    } else {
+      console.log('  Protein:                   0');
     }
     
     if (ingredients.includes('whole grain') || ingredients.includes('whole wheat')) {
       bonusPoints += 5;
+      console.log('  Whole Grains:             +5');
     }
     
     if (ingredients.includes('organic')) {
       bonusPoints += 3;
+      console.log('  Organic:                  +3');
     }
     
     bonusPoints = Math.min(bonusPoints, 20);
-    
-    console.log(`📊 Bonuses applied: ${bonusPoints} (capped at 20)`);
+    console.log('──────────────────────────────────────────────────────────');
+    console.log('  Total Bonuses:           +' + bonusPoints, '(capped at 20)');
     
     score += bonusPoints;
     
+    // Cap score at 0-100
     score = Math.max(0, Math.min(100, score));
     
+    console.log('');
+    console.log('══════════════════════════════════════════════════════════');
+    console.log('  RAW CALCULATED SCORE:    ', score);
+    
+    // Determine grade
     let grade, status;
     if (score >= 90) {
       grade = 'A';
@@ -1828,25 +2001,39 @@ class ProductService {
       status = 'Avoid - Serious Health Concerns';
     }
     
+    // Apply safety override if needed
     if (isSafetyOverride && score > 30) {
-      console.log(`SAFETY CAP APPLIED: Score ${score} reduced to 30 due to extreme sugar/fat`);
+      console.log('');
+      console.log('🚨 SAFETY OVERRIDE APPLIED:');
+      console.log('   Original Score:', score);
+      console.log('   Capped Score:   30 (D-)');
+      console.log('   Reason: Extreme sugar (' + sugar.toFixed(1) + 'g) or saturated fat (' + saturatedFat.toFixed(1) + 'g)');
+      
       score = 30;
-      if (score >= 45) {
-        grade = 'D+';
-        status = 'Avoid - Unhealthy';
-      } else if (score >= 40) {
-        grade = 'D';
-        status = 'Avoid - Very Unhealthy';  
-      } else if (score >= 30) {
-        grade = 'D-';
-        status = 'Avoid - Multiple Health Risks';
-      } else {
-        grade = 'F';
-        status = 'Avoid - Serious Health Concerns';
-      }
+      grade = 'D-';
+      status = 'Avoid - Multiple Health Risks';
     }
 
-    console.log(`✅ Final grade: ${grade} Score: ${score}`);
+    console.log('');
+    console.log('🎯 FINAL RESULTS:');
+    console.log('──────────────────────────────────────────────────────────');
+    console.log('  FINAL SCORE:             ', score);
+    console.log('  FINAL GRADE:             ', grade);
+    console.log('  STATUS:                  ', status);
+    console.log('  WARNINGS COUNT:          ', warnings.length);
+    if (warnings.length > 0) {
+      console.log('  WARNING BREAKDOWN:');
+      const criticalCount = warnings.filter(w => w.severity === 'critical').length;
+      const highCount = warnings.filter(w => w.severity === 'high').length;
+      const mediumCount = warnings.filter(w => w.severity === 'medium').length;
+      const lowCount = warnings.filter(w => w.severity === 'low').length;
+      if (criticalCount > 0) console.log('    Critical:              ', criticalCount);
+      if (highCount > 0) console.log('    High:                  ', highCount);
+      if (mediumCount > 0) console.log('    Medium:                ', mediumCount);
+      if (lowCount > 0) console.log('    Low:                   ', lowCount);
+    }
+    console.log('══════════════════════════════════════════════════════════');
+    console.log('');
 
     return {
       score: Math.round(score),

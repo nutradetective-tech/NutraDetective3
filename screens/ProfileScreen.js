@@ -10,6 +10,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
+import TierTestingTool from '../components/TierTestingTool';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
@@ -451,6 +452,8 @@ const ProfileScreen = ({
             </TouchableOpacity>
           )}
         </View>
+
+<TierTestingTool />
 
         {loadingProfiles ? (
           <View style={allergenStyles.loadingContainer}>

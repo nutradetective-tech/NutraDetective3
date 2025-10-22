@@ -15,7 +15,8 @@ import { Share } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import ProductService from '../services/ProductService';
 import PremiumService from '../services/PremiumService';
-import AllergenService from '../services/AllergenService'; // ← NEW IMPORT
+import AllergenService from '../services/AllergenService';
+import HealthyAlternativesService from '../services/HealthyAlternativesService';
 import AdhdAlertModal from '../components/modals/AdhdAlertModal';
 import { getGradeGradient, getResultBackgroundColor, getStatusBadgeColor } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
@@ -32,6 +33,7 @@ const ResultsScreen = ({
   styles,
   setShowUpgradeModal,
   setUpgradeReason,
+  handleBarcodeScan,  // ← NEW PROP
 }) => {
   // State for ADHD alert modal
   const [showAdhdAlert, setShowAdhdAlert] = useState(false);
@@ -42,10 +44,15 @@ const ResultsScreen = ({
   const [allergenSummary, setAllergenSummary] = useState(null);
   const [userTier, setUserTier] = useState('FREE');
 
-  // Check for ADHD additives and allergens when product loads
+  // ===== NEW: Healthy alternatives state =====
+  const [alternatives, setAlternatives] = useState([]);
+  const [loadingAlternatives, setLoadingAlternatives] = useState(false);
+
+  // Check for ADHD additives, allergens, and alternatives when product loads
   useEffect(() => {
     checkAdhdAdditives();
-    checkAllergens(); // ← NEW FUNCTION
+    checkAllergens();
+    loadAlternatives();
   }, [currentProduct]);
 
   const checkAdhdAdditives = async () => {
@@ -91,6 +98,127 @@ const ResultsScreen = ({
       }
     } catch (error) {
       console.error('Error checking allergens:', error);
+    }
+  };
+
+  // ===== NEW: Load healthy alternatives with COMPLETE ALLERGEN MAPPING =====
+  const loadAlternatives = async () => {
+    try {
+      setLoadingAlternatives(true);
+      
+      // Get user's allergen profiles - FIXED: Use getAllProfiles()
+      const allergenProfiles = await AllergenService.getAllProfiles();
+      const defaultProfile = allergenProfiles.find(p => p.isDefault);
+      
+      // Get raw allergen IDs from profile
+      const rawAllergenIds = defaultProfile?.allergens || [];
+      
+      // ========================================
+      // COMPLETE ALLERGEN MAPPING
+      // Maps ALL specific allergens to generic categories for filtering
+      // CRITICAL: This protects users from dangerous recommendations
+      // ========================================
+      const allergenMap = {
+        // ===== FDA TOP 8 (Generic - pass through) =====
+        'milk': 'milk',
+        'eggs': 'eggs',
+        'fish': 'fish',
+        'shellfish': 'shellfish',
+        'tree-nuts': 'tree-nuts',
+        'peanuts': 'peanuts',
+        'wheat': 'wheat',
+        'soy': 'soy',
+        
+        // ===== TREE NUTS (All map to generic tree-nuts) =====
+        'almonds': 'tree-nuts',
+        'cashews': 'tree-nuts',
+        'walnuts': 'tree-nuts',
+        'pecans': 'tree-nuts',
+        'pistachios': 'tree-nuts',
+        'hazelnuts': 'tree-nuts',
+        'macadamia': 'tree-nuts',
+        'brazil_nuts': 'tree-nuts',
+        'pine_nuts': 'tree-nuts',
+        
+        // ===== SEEDS (Keep specific) =====
+        'sesame': 'sesame',
+        'sunflower-seeds': 'sunflower',
+        'pumpkin-seeds': 'pumpkin',
+        'poppy-seeds': 'poppy',
+        'chia': 'chia',
+        'flax': 'flax',
+        
+        // ===== GRAINS (Keep specific or map to gluten) =====
+        'corn': 'corn',
+        'rice': 'rice',
+        'oats': 'oats',
+        'barley': 'wheat', // Contains gluten
+        'rye': 'wheat',    // Contains gluten
+        
+        // ===== FRUITS (Keep specific) =====
+        'kiwi': 'kiwi',
+        'banana': 'banana',
+        'avocado': 'avocado',
+        'strawberry': 'strawberry',
+        'mango': 'mango',
+        'pineapple': 'pineapple',
+        'peach': 'peach',
+        'apple': 'apple',
+        
+        // ===== VEGETABLES (Keep specific) =====
+        'celery': 'celery',
+        'tomato': 'tomato',
+        'potato': 'potato',
+        'carrot': 'carrot',
+        
+        // ===== LEGUMES (Keep specific) =====
+        'lupin': 'lupin',
+        'chickpeas': 'chickpeas',
+        'lentils': 'lentils',
+        
+        // ===== OTHER ALLERGENS (Keep specific) =====
+        'mustard': 'mustard',
+        'sulfites': 'sulfites',
+        'coconut': 'coconut',
+        'cocoa': 'cocoa',
+        'caffeine': 'caffeine',
+        
+        // ===== ADDITIVES (Keep specific) =====
+        'msg': 'msg',
+        'carrageenan': 'carrageenan',
+        'red_dye': 'red-dye',
+        'yellow_dye': 'yellow-dye',
+        
+        // ===== LATEX CROSS-REACTIVE (Map to fruit) =====
+        'latex_banana': 'banana',
+        'latex_avocado': 'avocado',
+        'latex_kiwi': 'kiwi',
+      };
+      
+      // Convert to generic allergen list for filtering
+      const userAllergens = rawAllergenIds.map(id => allergenMap[id] || id);
+      
+      // Remove duplicates
+      const uniqueAllergens = [...new Set(userAllergens)];
+      
+      console.log('🔄 ALLERGEN MAPPING FOR ALTERNATIVES:');
+      console.log('══════════════════════════════════════════════════════════');
+      console.log('📋 Raw allergen IDs from profile:', rawAllergenIds);
+      console.log('🔀 Mapped to generic categories:', uniqueAllergens);
+      console.log('✅ Total allergens to filter:', uniqueAllergens.length);
+      console.log('══════════════════════════════════════════════════════════');
+      
+      // Find alternatives (will filter out ALL mapped allergens)
+      const foundAlternatives = await HealthyAlternativesService.findAlternatives(
+        currentProduct,
+        uniqueAllergens
+      );
+      
+      setAlternatives(foundAlternatives);
+    } catch (error) {
+      console.error('❌ Error loading alternatives:', error);
+    } finally {
+      setLoadingAlternatives(false);
     }
   };
 
@@ -212,29 +340,18 @@ const ResultsScreen = ({
               </View>
             </View>
 
-            {/* ===== NEW: Advanced Allergen Warning (replaces old system) ===== */}
+            {/* ===== NEW: Advanced Allergen Warning - RED URGENT STYLING ===== */}
             {allergenSummary && allergenSummary.hasAllergens && (
-              <View style={[
-                additionalStyles.allergenAlertBox,
-                allergenSummary.highestSeverity === 'SEVERE' && { 
-                  borderColor: '#DC2626',
-                  borderWidth: 2 
-                }
-              ]}>
+              <View style={additionalStyles.allergenAlertBox}>
                 <View style={additionalStyles.allergenHeader}>
-                  <Text style={additionalStyles.allergenIcon}>
-                    {allergenSummary.highestSeverity === 'SEVERE' ? '🔴' :
-                     allergenSummary.highestSeverity === 'MODERATE' ? '🟡' : '🟢'}
-                  </Text>
+                  <Text style={additionalStyles.allergenIcon}>🚨</Text>
                   <Text style={additionalStyles.allergenTitle}>
-                    {allergenSummary.highestSeverity === 'SEVERE' ? 'SEVERE ALLERGEN ALERT' :
-                     allergenSummary.highestSeverity === 'MODERATE' ? 'Allergen Warning' :
-                     'Allergen Notice'}
+                    ALLERGEN ALERT !!!
                   </Text>
                 </View>
 
                 <Text style={additionalStyles.allergenDescription}>
-                  This product contains allergens affecting {allergenSummary.affectedProfiles} family member(s).
+                  ⚠️ WARNING: This product contains allergens affecting {allergenSummary.affectedProfiles} family member(s).
                 </Text>
 
                 {/* Show warnings by profile */}
@@ -247,8 +364,7 @@ const ResultsScreen = ({
                     {result.warnings.map((warning, wIdx) => (
                       <View key={wIdx} style={additionalStyles.allergenItemRow}>
                         <Text style={additionalStyles.severityIcon}>
-                          {warning.severity === 'SEVERE' ? '🔴' :
-                           warning.severity === 'MODERATE' ? '🟡' : '🟢'}
+                          🔴
                         </Text>
                         <View style={{ flex: 1 }}>
                           <Text style={additionalStyles.allergenItemTitle}>
@@ -335,7 +451,58 @@ const ResultsScreen = ({
               </View>
             )}
 
-            {/* REST OF THE SCREEN - UNCHANGED */}
+            {/* ===== NEW: Healthy Alternatives Section ===== */}
+            {alternatives.length > 0 && (
+              <View style={additionalStyles.alternativesSection}>
+                <Text style={styles.sectionTitle}>✨ Healthier Alternatives</Text>
+                <Text style={additionalStyles.alternativesSubtext}>
+                  We found {alternatives.length} better option{alternatives.length > 1 ? 's' : ''} for you
+                </Text>
+                
+                {alternatives.map((alt, index) => (
+                  <View key={index} style={additionalStyles.alternativeCard}>
+                    <View style={additionalStyles.alternativeHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={additionalStyles.alternativeName}>{alt.name}</Text>
+                        <Text style={additionalStyles.alternativeBrand}>{alt.brand}</Text>
+                      </View>
+                      <View style={additionalStyles.alternativeGrade}>
+                        <Text style={additionalStyles.alternativeGradeText}>{alt.grade}</Text>
+                      </View>
+                    </View>
+                    
+                    {alt.advantages && alt.advantages.length > 0 && (
+                      <View style={additionalStyles.advantagesList}>
+                        {alt.advantages.slice(0, 3).map((adv, idx) => (
+                          <View key={idx} style={additionalStyles.advantageChip}>
+                            <Text style={additionalStyles.advantageText}>{adv}</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+                    
+                    {alt.barcode && (
+  <TouchableOpacity
+    style={additionalStyles.scanButton}
+    onPress={() => {
+  console.log('🔄 Scanning alternative:', alt.barcode);
+  
+  // Close current results
+  setShowResult(false);
+  setCurrentProduct(null);
+  
+  // Trigger scan of alternative product
+  handleBarcodeScan(alt.barcode);
+}}
+  >
+    <Text style={additionalStyles.scanButtonText}>Scan This Instead</Text>
+  </TouchableOpacity>
+)}
+                  </View>
+                ))}
+              </View>
+            )}
+
             {/* Nutrition section */}
             {(productData.nutriments || productData.displayData?.keyNutrients) && (
               <View style={additionalStyles.nutritionSection}>
@@ -598,17 +765,17 @@ const ResultsScreen = ({
   );
 };
 
-// ===== UPDATED STYLES WITH NEW ALLERGEN STYLES =====
+// ===== STYLES WITH NEW ALTERNATIVES SECTION =====
 const additionalStyles = StyleSheet.create({
-  // ===== NEW: Advanced Allergen Styles =====
+  // ===== Allergen Styles =====
   allergenAlertBox: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#FEE2E2',
     borderRadius: 16,
     padding: 16,
     marginHorizontal: 15,
     marginVertical: 8,
-    borderWidth: 1,
-    borderColor: '#FCA5A5',
+    borderWidth: 3,
+    borderColor: '#DC2626',
   },
   allergenHeader: {
     flexDirection: 'row',
@@ -616,17 +783,18 @@ const additionalStyles = StyleSheet.create({
     marginBottom: 8,
   },
   allergenIcon: {
-    fontSize: 24,
+    fontSize: 28,
     marginRight: 8,
   },
   allergenTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#991B1B',
+    color: '#DC2626',
   },
   allergenDescription: {
-    fontSize: 14,
-    color: '#7F1D1D',
+    fontSize: 15,
+    color: '#991B1B',
+    fontWeight: '700',
     marginBottom: 12,
     lineHeight: 20,
   },
@@ -693,7 +861,7 @@ const additionalStyles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ===== EXISTING STYLES (kept) =====
+  // ===== All Other Styles =====
   servingSizeContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -744,6 +912,88 @@ const additionalStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+
+  // ===== NEW: Healthy Alternatives Styles =====
+  alternativesSection: {
+    backgroundColor: 'white',
+    marginHorizontal: 15,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 12,
+  },
+  alternativesSubtext: {
+    color: '#6B7280',
+    fontSize: 14,
+    marginTop: 5,
+    marginBottom: 12,
+  },
+  alternativeCard: {
+    backgroundColor: '#F9FAFB',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  alternativeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  alternativeName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1F2937',
+  },
+  alternativeBrand: {
+    fontSize: 13,
+    color: '#6B7280',
+    marginTop: 2,
+  },
+  alternativeGrade: {
+    backgroundColor: '#10B981',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginLeft: 10,
+  },
+  alternativeGradeText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  advantagesList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: 8,
+  },
+  advantageChip: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    marginRight: 6,
+    marginBottom: 4,
+  },
+  advantageText: {
+    fontSize: 12,
+    color: '#065F46',
+    fontWeight: '500',
+  },
+  scanButton: {
+    backgroundColor: '#667EEA',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  scanButtonText: {
+    color: 'white',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // ===== Rest of styles =====
   nutritionSection: {
     backgroundColor: 'white',
     marginHorizontal: 15,
