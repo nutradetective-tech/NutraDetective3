@@ -6,7 +6,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getAdditiveInfo } from './additives-database';
 import { HARMFUL_INGREDIENTS_DATABASE } from './harmful-ingredients-master';
-import RecallService from './RecallService';
 
 // ADHD-LINKED ADDITIVES DATABASE
 // Based on Southampton Study (2007) and FDA research
@@ -496,23 +495,6 @@ class ProductService {
         source: source,
         rawData: product
       };
-      
-      // 🚨 CHECK FOR RECALLS BEFORE RETURNING
-      console.log('');
-      console.log('🚨 Checking if product is recalled...');
-      const recallData = await RecallService.checkProductRecall(barcode, {
-        name: finalProduct.name,
-        brand: finalProduct.brand
-      });
-      
-      // Add recall data to product object
-      if (recallData) {
-        finalProduct.recall = recallData;
-        console.log('🚨 RECALL DATA ADDED TO PRODUCT');
-      } else {
-        finalProduct.recall = null;
-        console.log('✅ No recall - product is safe');
-      }
       
       // 🔥 SAVE TO CACHE FOR NEXT TIME
       try {
