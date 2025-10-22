@@ -412,6 +412,72 @@ const ResultsScreen = ({
               </View>
             )}
 
+{/* ===== 🚨 RECALL ALERT - HIGHEST PRIORITY ===== */}
+            {currentProduct.recall && (
+              <View style={additionalStyles.recallAlertBox}>
+                <View style={additionalStyles.recallHeader}>
+                  <Text style={additionalStyles.recallIcon}>🚨</Text>
+                  <Text style={additionalStyles.recallTitle}>
+                    PRODUCT RECALLED
+                  </Text>
+                </View>
+
+                <Text style={additionalStyles.recallUrgent}>
+                  ⛔ DO NOT CONSUME THIS PRODUCT
+                </Text>
+
+                <View style={additionalStyles.recallInfoSection}>
+                  <Text style={additionalStyles.recallInfoLabel}>Reason:</Text>
+                  <Text style={additionalStyles.recallInfoValue}>
+                    {currentProduct.recall.reason}
+                  </Text>
+                </View>
+
+                <View style={additionalStyles.recallInfoSection}>
+                  <Text style={additionalStyles.recallInfoLabel}>Classification:</Text>
+                  <Text style={[
+                    additionalStyles.recallInfoValue,
+                    currentProduct.recall.severity === 'critical' && { color: '#DC2626', fontWeight: 'bold' }
+                  ]}>
+                    {currentProduct.recall.classification}
+                  </Text>
+                </View>
+
+                <View style={additionalStyles.recallInfoSection}>
+                  <Text style={additionalStyles.recallInfoLabel}>Recall Date:</Text>
+                  <Text style={additionalStyles.recallInfoValue}>
+                    {currentProduct.recall.recallDate}
+                  </Text>
+                </View>
+
+                <View style={additionalStyles.recallActionBox}>
+                  <Text style={additionalStyles.recallActionText}>
+                    {currentProduct.recall.actionToTake}
+                  </Text>
+                </View>
+
+                <Text style={additionalStyles.recallSource}>
+                  Source: {currentProduct.recall.source} • {currentProduct.recall.recallNumber}
+                </Text>
+
+                <TouchableOpacity
+                  style={additionalStyles.recallLinkButton}
+                  onPress={() => {
+                    // Link to official recall page
+                    Alert.alert(
+                      'Official Recall Information',
+                      `Visit: ${currentProduct.recall.officialLink}`,
+                      [{ text: 'OK' }]
+                    );
+                  }}
+                >
+                  <Text style={additionalStyles.recallLinkText}>
+                    View Official Recall Notice →
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
             {/* Old allergen section - keep for backward compatibility */}
             {userAllergenWarnings && userAllergenWarnings.length > 0 && !allergenSummary && (
               <View style={styles.allergenAlertBox}>
@@ -767,6 +833,100 @@ const ResultsScreen = ({
 
 // ===== STYLES WITH NEW ALTERNATIVES SECTION =====
 const additionalStyles = StyleSheet.create({
+  // ===== RECALL ALERT STYLES =====
+  recallAlertBox: {
+    backgroundColor: '#7F1D1D',
+    borderRadius: 16,
+    padding: 20,
+    marginHorizontal: 15,
+    marginVertical: 12,
+    borderWidth: 4,
+    borderColor: '#DC2626',
+    shadowColor: '#DC2626',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  recallHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  recallIcon: {
+    fontSize: 32,
+    marginRight: 10,
+  },
+  recallTitle: {
+    fontSize: 22,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  recallUrgent: {
+    fontSize: 17,
+    fontWeight: '800',
+    color: '#FEE2E2',
+    marginBottom: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#991B1B',
+    borderRadius: 8,
+    textAlign: 'center',
+  },
+  recallInfoSection: {
+    marginBottom: 10,
+    backgroundColor: '#991B1B',
+    padding: 10,
+    borderRadius: 8,
+  },
+  recallInfoLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#FCA5A5',
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  recallInfoValue: {
+    fontSize: 15,
+    color: '#FFFFFF',
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  recallActionBox: {
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    padding: 14,
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  recallActionText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  recallSource: {
+    fontSize: 12,
+    color: '#FCA5A5',
+    fontStyle: 'italic',
+    marginTop: 8,
+    textAlign: 'center',
+  },
+  recallLinkButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  recallLinkText: {
+    color: '#7F1D1D',
+    fontSize: 14,
+    fontWeight: '700',
+  },
   // ===== Allergen Styles =====
   allergenAlertBox: {
     backgroundColor: '#FEE2E2',
