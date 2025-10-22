@@ -1,243 +1,175 @@
 // services/RecallService.js
-// NutraDetective - USDA/FDA Recall Alerts System
-// Version 1.0 - Basic Recall Checking (PHASE 1)
-// Checks products against FDA and USDA recall databases
+// NutraDetective - USDA/FDA Recall News Feed System
+// Version 2.0 - Feed-Based Approach (Not Per-Product)
+// Fetches latest recalls for news feed + smart scan matching
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 class RecallService {
   /**
-   * Main function: Check if a product is recalled
-   * @param {string} barcode - Product barcode (UPC-A or EAN-13)
-   * @param {object} productInfo - Product name, brand, etc.
-   * @returns {object|null} - Recall data if found, null if not recalled
+   * 📰 MAIN FUNCTION: Fetch Latest Recall Feed
+   * Gets the most recent 50 recalls from FDA
+   * @returns {Array} - Array of recall objects
    */
-  static async checkProductRecall(barcode, productInfo = {}) {
+  static async fetchRecallFeed() {
     console.log('');
     console.log('══════════════════════════════════════════════════════════');
-    console.log('🚨 RECALL CHECK STARTED');
+    console.log('📰 FETCHING RECALL FEED');
     console.log('══════════════════════════════════════════════════════════');
-    console.log('📦 Product:', productInfo.name || 'Unknown');
-    console.log('🔢 Barcode:', barcode);
-    console.log('');
 
     try {
-      // Check cache first (recalls update daily, so cache for 12 hours)
-      const cached = await this.getCachedRecallCheck(barcode);
+      // Check cache first (recall feed updates hourly)
+      const cached = await this.getCachedFeed();
       if (cached !== null) {
-        console.log('✅ Using cached recall check (age: ' + cached.age + ' hours)');
+        console.log('✅ Using cached recall feed (age: ' + cached.age + ' minutes)');
+        console.log('📊 Total recalls in feed:', cached.data.length);
+        console.log('══════════════════════════════════════════════════════════');
         return cached.data;
       }
 
-      // Check both FDA and USDA in parallel for speed
-      const [fdaRecall, usdaRecall] = await Promise.all([
-        this.checkFDARecalls(barcode, productInfo),
-        this.checkUSDARecalls(barcode, productInfo)
-      ]);
+      console.log('📡 Fetching fresh recall data from FDA...');
 
-      // Return the first recall found (FDA takes priority as it's broader)
-      const recallData = fdaRecall || usdaRecall;
-
-      // Cache the result (even if null, to avoid repeated API calls)
-      await this.cacheRecallCheck(barcode, recallData);
-
-      if (recallData) {
-        console.log('');
-        console.log('🚨🚨🚨 RECALL DETECTED! 🚨🚨🚨');
-        console.log('══════════════════════════════════════════════════════════');
-        console.log('Product:', recallData.productName);
-        console.log('Reason:', recallData.reason);
-        console.log('Date:', recallData.recallDate);
-        console.log('Action:', recallData.actionToTake);
-        console.log('══════════════════════════════════════════════════════════');
-        console.log('');
-      } else {
-        console.log('✅ No recalls found - product is safe');
-        console.log('══════════════════════════════════════════════════════════');
-        console.log('');
-      }
-
-      return recallData;
-
-    } catch (error) {
-      console.error('❌ Recall check error:', error.message);
-      console.log('══════════════════════════════════════════════════════════');
-      console.log('');
-      // Don't fail the product scan if recall check fails
-      return null;
-    }
-  }
-
-  /**
-   * Check FDA Food Enforcement Reports
-   * Covers: packaged foods, beverages, dietary supplements
-   */
-  static async checkFDARecalls(barcode, productInfo) {
-    console.log('📡 Checking FDA Enforcement API...');
-
-    try {
-      // FDA API endpoint - search by product code (UPC)
-      // Free API, no key needed, JSON response
-      const searchQuery = barcode.replace(/^0+/, ''); // Remove leading zeros
-      const url = `https://api.fda.gov/food/enforcement.json?search=product_code:"${searchQuery}" OR upc:"${barcode}"&limit=5`;
-
-      console.log('   URL:', url);
+      // FDA Enforcement API - Get latest food recalls
+      // Sorted by report date (most recent first)
+      // Limit to 50 for performance
+      const url = 'https://api.fda.gov/food/enforcement.json?limit=50&sort=report_date:desc';
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 sec timeout
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 sec timeout
 
-      const response = await fetch(url, { 
+      const response = await fetch(url, {
         signal: controller.signal,
         headers: {
           'Accept': 'application/json'
         }
       });
-      
+
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        console.log('   ❌ FDA API returned status:', response.status);
-        return null;
+        console.error('❌ FDA API returned status:', response.status);
+        console.log('══════════════════════════════════════════════════════════');
+        return [];
       }
 
       const data = await response.json();
 
-      // Check if any results
       if (!data.results || data.results.length === 0) {
-        console.log('   ✅ No FDA recalls found');
-        return null;
+        console.log('⚠️  No recalls found in FDA database');
+        console.log('══════════════════════════════════════════════════════════');
+        return [];
       }
 
-      console.log('   ⚠️  Found', data.results.length, 'potential FDA recall(s)');
+      console.log('✅ Retrieved', data.results.length, 'recalls from FDA');
 
-      // Get the most recent recall
-      const recall = data.results[0];
-
-      // Match by product name/brand (since barcode matching is imperfect)
-      const productName = (productInfo.name || '').toLowerCase();
-      const productBrand = (productInfo.brand || '').toLowerCase();
-      const recallProduct = (recall.product_description || '').toLowerCase();
-
-      const nameMatch = productName && recallProduct.includes(productName);
-      const brandMatch = productBrand && recallProduct.includes(productBrand);
-
-      if (!nameMatch && !brandMatch) {
-        console.log('   ℹ️  Recall found but product name/brand doesn\'t match - likely false positive');
-        console.log('   Scanned:', productName, '/', productBrand);
-        console.log('   Recalled:', recallProduct);
-        return null;
-      }
-
-      console.log('   🚨 MATCH CONFIRMED - This product is recalled!');
-
-      // Extract recall information
-      return {
-        isRecalled: true,
-        source: 'FDA',
+      // Transform FDA data into our format
+      const recalls = data.results.map((recall, index) => ({
+        id: recall.recall_number || `recall-${index}`,
         productName: recall.product_description || 'Unknown Product',
+        brand: this.extractBrand(recall.product_description),
         reason: recall.reason_for_recall || 'Reason not specified',
         classification: recall.classification || 'Not specified',
+        severity: this.getSeverityFromClassification(recall.classification),
         recallDate: recall.report_date || recall.recall_initiation_date || 'Date unknown',
         recallNumber: recall.recall_number || 'N/A',
         company: recall.recalling_firm || 'Unknown',
         distributionPattern: recall.distribution_pattern || 'Unknown',
         actionToTake: this.getActionFromClassification(recall.classification),
-        severity: this.getSeverityFromClassification(recall.classification),
         details: recall.code_info || '',
-        officialLink: `https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts`
-      };
+        source: 'FDA',
+        officialLink: 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts'
+      }));
+
+      // Cache the feed
+      await this.cacheFeed(recalls);
+
+      console.log('✅ Recall feed processed and cached');
+      console.log('══════════════════════════════════════════════════════════');
+
+      return recalls;
 
     } catch (error) {
       if (error.name === 'AbortError') {
-        console.log('   ⏱️  FDA API timeout (5 sec)');
+        console.error('⏱️  FDA API timeout (10 sec)');
       } else {
-        console.log('   ❌ FDA API error:', error.message);
+        console.error('❌ Recall feed fetch error:', error.message);
       }
+      console.log('══════════════════════════════════════════════════════════');
+      
+      // Return cached data even if expired, better than nothing
+      const expiredCache = await this.getCachedFeed(true);
+      return expiredCache ? expiredCache.data : [];
+    }
+  }
+
+  /**
+   * 🔍 SMART SCAN CHECK
+   * Quickly checks if scanned product matches any recalls in feed
+   * Uses cached feed (no API call = FAST)
+   * @param {string} productName - Product name from scan
+   * @param {string} brandName - Brand name from scan
+   * @returns {object|null} - Matching recall or null
+   */
+  static async checkScannedProduct(productName, brandName) {
+    try {
+      // Get cached feed (don't fetch fresh, that's slow)
+      const cached = await this.getCachedFeed(true); // Allow expired cache
+      if (!cached || !cached.data) {
+        return null; // No feed cached yet
+      }
+
+      const feed = cached.data;
+      const searchName = (productName || '').toLowerCase();
+      const searchBrand = (brandName || '').toLowerCase();
+
+      // Quick fuzzy match
+      for (const recall of feed) {
+        const recallProduct = recall.productName.toLowerCase();
+        const recallBrand = recall.brand.toLowerCase();
+
+        // Check if product name contains any significant words from recall
+        const productWords = searchName.split(' ').filter(w => w.length > 3);
+        const recallWords = recallProduct.split(' ').filter(w => w.length > 3);
+
+        const hasNameMatch = productWords.some(word => 
+          recallWords.some(rWord => rWord.includes(word) || word.includes(rWord))
+        );
+
+        const hasBrandMatch = searchBrand && recallBrand && 
+          (recallBrand.includes(searchBrand) || searchBrand.includes(recallBrand));
+
+        // Match if both name and brand match, or strong name match
+        if ((hasNameMatch && hasBrandMatch) || (hasNameMatch && productWords.length >= 2)) {
+          console.log('🚨 RECALL MATCH FOUND DURING SCAN!');
+          console.log('   Scanned:', productName, '/', brandName);
+          console.log('   Recalled:', recall.productName);
+          return recall;
+        }
+      }
+
+      return null; // No match
+
+    } catch (error) {
+      console.error('Error checking scanned product:', error.message);
       return null;
     }
   }
 
   /**
-   * Check USDA FSIS Recalls
-   * Covers: meat, poultry, egg products
+   * Extract brand from product description
    */
-  static async checkUSDARecalls(barcode, productInfo) {
-    console.log('📡 Checking USDA FSIS API...');
-
-    try {
-      // USDA doesn't have a direct barcode API, so we search by product name
-      // Their API is XML-based and less modern than FDA
-      // For now, we'll use a simplified approach
-
-      const productName = productInfo.name || '';
-      const productBrand = productInfo.brand || '';
-
-      if (!productName) {
-        console.log('   ⚠️  No product name to search USDA - skipping');
-        return null;
-      }
-
-      // USDA Food Safety API endpoint
-      // This is a simplified check - full implementation would parse their XML feed
-      const searchTerm = encodeURIComponent(productName);
-      const url = `https://www.fsis.usda.gov/fsis-content/api/v1/recalls?search=${searchTerm}`;
-
-      console.log('   URL:', url);
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-      const response = await fetch(url, { 
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        console.log('   ❌ USDA API returned status:', response.status);
-        // USDA API might not be available - this is OK, FDA covers most products
-        return null;
-      }
-
-      const data = await response.json();
-
-      if (!data || !data.results || data.results.length === 0) {
-        console.log('   ✅ No USDA recalls found');
-        return null;
-      }
-
-      console.log('   ⚠️  Found', data.results.length, 'potential USDA recall(s)');
-
-      const recall = data.results[0];
-
-      // Return structured recall data
-      return {
-        isRecalled: true,
-        source: 'USDA',
-        productName: recall.product || productName,
-        reason: recall.reason || 'Contamination concern',
-        classification: recall.class || 'Class I',
-        recallDate: recall.date || 'Date unknown',
-        recallNumber: recall.recall_number || 'N/A',
-        company: recall.company || productBrand,
-        distributionPattern: recall.distribution || 'Unknown',
-        actionToTake: 'Do not consume. Return to store or discard immediately.',
-        severity: 'critical',
-        details: recall.description || '',
-        officialLink: 'https://www.fsis.usda.gov/recalls'
-      };
-
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('   ⏱️  USDA API timeout (5 sec)');
-      } else {
-        console.log('   ❌ USDA API error:', error.message);
-      }
-      return null;
-    }
+  static extractBrand(description) {
+    if (!description) return 'Unknown';
+    
+    // Try to extract brand from common patterns
+    // "BRAND NAME Product Description"
+    const words = description.split(' ');
+    
+    // Often brand is first 1-2 words before a comma or parenthesis
+    const firstPart = description.split(/[,\(]/)[0];
+    const brandCandidate = firstPart.split(' ').slice(0, 2).join(' ');
+    
+    return brandCandidate || words[0] || 'Unknown';
   }
 
   /**
@@ -273,69 +205,116 @@ class RecallService {
   }
 
   /**
-   * Cache recall check result (12-hour cache)
+   * Cache recall feed (1 hour cache)
    */
-  static async cacheRecallCheck(barcode, recallData) {
+  static async cacheFeed(recalls) {
     try {
-      const cacheKey = `recall_check_${barcode}`;
+      const cacheKey = 'recall_feed_cache';
       await AsyncStorage.setItem(cacheKey, JSON.stringify({
-        data: recallData,
-        cachedAt: new Date().toISOString()
+        data: recalls,
+        cachedAt: new Date().toISOString(),
+        count: recalls.length
       }));
+      console.log('💾 Cached', recalls.length, 'recalls');
     } catch (error) {
-      console.log('Cache write error:', error.message);
+      console.error('Cache write error:', error.message);
     }
   }
 
   /**
-   * Get cached recall check (if not expired)
+   * Get cached recall feed (if not expired)
+   * @param {boolean} allowExpired - Return expired cache if true
    */
-  static async getCachedRecallCheck(barcode) {
+  static async getCachedFeed(allowExpired = false) {
     try {
-      const cacheKey = `recall_check_${barcode}`;
+      const cacheKey = 'recall_feed_cache';
       const cached = await AsyncStorage.getItem(cacheKey);
       
       if (!cached) return null;
 
       const parsed = JSON.parse(cached);
       const cacheAge = Date.now() - new Date(parsed.cachedAt).getTime();
-      const maxAge = 12 * 60 * 60 * 1000; // 12 hours
+      const maxAge = 60 * 60 * 1000; // 1 hour
 
-      if (cacheAge > maxAge) {
-        console.log('Recall cache expired, fetching fresh data');
+      if (!allowExpired && cacheAge > maxAge) {
+        console.log('⚠️  Recall feed cache expired, fetching fresh data');
         return null;
       }
 
-      const ageHours = Math.round(cacheAge / (60 * 60 * 1000));
+      const ageMinutes = Math.round(cacheAge / (60 * 1000));
       return {
         data: parsed.data,
-        age: ageHours
+        age: ageMinutes,
+        count: parsed.count
       };
 
     } catch (error) {
-      console.log('Cache read error:', error.message);
+      console.error('Cache read error:', error.message);
       return null;
     }
   }
 
   /**
-   * Clear recall cache (useful for testing)
+   * Get last feed update time
    */
-  static async clearCache(barcode = null) {
+  static async getLastUpdateTime() {
     try {
-      if (barcode) {
-        // Clear specific barcode
-        await AsyncStorage.removeItem(`recall_check_${barcode}`);
-        console.log('✅ Cleared recall cache for barcode:', barcode);
-      } else {
-        // Clear all recall caches
-        const keys = await AsyncStorage.getAllKeys();
-        const recallKeys = keys.filter(key => key.startsWith('recall_check_'));
-        await AsyncStorage.multiRemove(recallKeys);
-        console.log('✅ Cleared all recall caches (' + recallKeys.length + ' items)');
-      }
+      const cached = await this.getCachedFeed(true); // Allow expired
+      if (!cached) return null;
+      
+      const cacheAge = cached.age;
+      return {
+        lastUpdate: new Date(Date.now() - (cacheAge * 60 * 1000)),
+        minutesAgo: cacheAge,
+        needsRefresh: cacheAge > 60
+      };
     } catch (error) {
-      console.error('Error clearing recall cache:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Force refresh feed (ignore cache)
+   */
+  static async refreshFeed() {
+    console.log('🔄 Force refreshing recall feed...');
+    await AsyncStorage.removeItem('recall_feed_cache');
+    return await this.fetchRecallFeed();
+  }
+
+  /**
+   * Search recalls by keyword
+   */
+  static async searchRecalls(keyword) {
+    const feed = await this.fetchRecallFeed();
+    if (!keyword || keyword.trim() === '') return feed;
+
+    const searchTerm = keyword.toLowerCase();
+    return feed.filter(recall => 
+      recall.productName.toLowerCase().includes(searchTerm) ||
+      recall.brand.toLowerCase().includes(searchTerm) ||
+      recall.reason.toLowerCase().includes(searchTerm) ||
+      recall.company.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  /**
+   * Get recalls by severity
+   */
+  static async getRecallsBySeverity(severity) {
+    const feed = await this.fetchRecallFeed();
+    return feed.filter(recall => recall.severity === severity);
+  }
+
+  /**
+   * Clear cache (useful for testing)
+   */
+  static async clearCache() {
+    try {
+      await AsyncStorage.removeItem('recall_feed_cache');
+      console.log('✅ Recall feed cache cleared');
+    } catch (error) {
+      console.error('Error clearing cache:', error);
     }
   }
 }

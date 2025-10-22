@@ -21,6 +21,7 @@ import AdhdAlertModal from '../components/modals/AdhdAlertModal';
 import { getGradeGradient, getResultBackgroundColor, getStatusBadgeColor } from '../utils/calculations';
 import { isTablet } from '../utils/responsive';
 import { Ionicons } from '@expo/vector-icons';
+import RecallService from '../services/RecallService';
 
 const ResultsScreen = ({
   currentProduct,
@@ -35,6 +36,10 @@ const ResultsScreen = ({
   setUpgradeReason,
   handleBarcodeScan,  // ← NEW PROP
 }) => {
+  // ===== NEW: Recall check state =====
+  const [scannedRecall, setScannedRecall] = useState(null);
+  const [checkingRecall, setCheckingRecall] = useState(false);
+  
   // State for ADHD alert modal
   const [showAdhdAlert, setShowAdhdAlert] = useState(false);
   const [adhdAdditives, setAdhdAdditives] = useState([]);
@@ -53,6 +58,7 @@ const ResultsScreen = ({
     checkAdhdAdditives();
     checkAllergens();
     loadAlternatives();
+    checkForRecall();
   }, [currentProduct]);
 
   const checkAdhdAdditives = async () => {
@@ -103,7 +109,7 @@ const ResultsScreen = ({
 
   // ===== NEW: Load healthy alternatives with COMPLETE ALLERGEN MAPPING =====
   const loadAlternatives = async () => {
-    try {
+      try {
       setLoadingAlternatives(true);
       
       // Get user's allergen profiles - FIXED: Use getAllProfiles()
@@ -195,7 +201,56 @@ const ResultsScreen = ({
         'latex_kiwi': 'kiwi',
       };
       
-      // Convert to generic allergen list for filtering
+const handleShareRecall = async () => {
+    if (!scannedRecall) return;
+
+    const shareMessage = 
+      `🚨 FOOD RECALL ALERT\n\n` +
+      `I just scanned "${currentProduct.name}" and it's been RECALLED!\n\n` +
+      `Reason: ${scannedRecall.reason}\n` +
+      `Classification: ${scannedRecall.classification}\n` +
+      `Date: ${scannedRecall.recallDate}\n\n` +
+      `${scannedRecall.actionToTake}\n\n` +
+      `Check your food safety with NutraDetective 📱\n` +
+      `Download: https://nutradetective.com`;
+
+    try {
+      await Share.share({
+        message: shareMessage,
+        title: 'Food Recall Alert'
+      });
+    } catch (error) {
+      console.error('Error sharing recall:', error);
+    }
+  };
+
+      // ===== NEW: Check if scanned product is recalled =====
+  const checkForRecall = async () => {
+    try {
+      setCheckingRecall(true);
+      
+      // Quick check against cached recall feed (no API call!)
+      const recall = await RecallService.checkScannedProduct(
+        currentProduct.name,
+        currentProduct.brand
+      );
+      
+      if (recall) {
+        console.log('🚨 SCANNED PRODUCT IS RECALLED!');
+        setScannedRecall(recall);
+      } else {
+        console.log('✅ Scanned product not in recall database');
+        setScannedRecall(null);
+      }
+    } catch (error) {
+      console.error('Error checking recall:', error);
+      setScannedRecall(null);
+    } finally {
+      setCheckingRecall(false);
+    }
+  };
+      
+  // Convert to generic allergen list for filtering
       const userAllergens = rawAllergenIds.map(id => allergenMap[id] || id);
       
       // Remove duplicates
@@ -378,6 +433,66 @@ const ResultsScreen = ({
                     ))}
                   </View>
                 ))}
+
+                {/* ===== 🚨 SCANNED PRODUCT RECALL ALERT ===== */}
+            {scannedRecall && (
+              <View style={additionalStyles.scannedRecallBanner}>
+                <View style={additionalStyles.scannedRecallHeader}>
+                  <Text style={additionalStyles.scannedRecallIcon}>🚨</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={additionalStyles.scannedRecallTitle}>
+                      RECALL ALERT
+                    </Text>
+                    <Text style={additionalStyles.scannedRecallSubtitle}>
+                      This product has an active recall
+                    </Text>
+                  </View>
+                  <View style={[
+                    additionalStyles.severityDot,
+                    { backgroundColor: scannedRecall.severity === 'critical' ? '#DC2626' : '#F97316' }
+                  ]} />
+                </View>
+
+                <View style={additionalStyles.scannedRecallContent}>
+                  <Text style={additionalStyles.scannedRecallReason}>
+                    <Text style={{ fontWeight: 'bold' }}>Reason: </Text>
+                    {scannedRecall.reason}
+                  </Text>
+                  <Text style={additionalStyles.scannedRecallDate}>
+                    Recall Date: {scannedRecall.recallDate}
+                  </Text>
+                </View>
+
+                <View style={additionalStyles.scannedRecallAction}>
+                  <Text style={additionalStyles.scannedRecallActionText}>
+                    {scannedRecall.actionToTake}
+                  </Text>
+                </View>
+
+                <TouchableOpacity
+                  style={additionalStyles.viewRecallButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Full Recall Details',
+                      `${scannedRecall.productName}\n\n` +
+                      `Company: ${scannedRecall.company}\n` +
+                      `Classification: ${scannedRecall.classification}\n` +
+                      `Recall Number: ${scannedRecall.recallNumber}\n\n` +
+                      `${scannedRecall.details || 'No additional details'}\n\n` +
+                      `View all recalls in the Safety Alerts tab.`,
+                      [
+                        { text: 'Share Alert', onPress: () => handleShareRecall() },
+                        { text: 'OK' }
+                      ]
+                    );
+                  }}
+                >
+                  <Text style={additionalStyles.viewRecallButtonText}>
+                    View Full Details →
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
                 {/* Hidden allergens warning */}
                 {allergenSummary.hiddenAllergens.length > 0 && (
@@ -767,6 +882,83 @@ const ResultsScreen = ({
 
 // ===== STYLES WITH NEW ALTERNATIVES SECTION =====
 const additionalStyles = StyleSheet.create({
+
+  // ===== Scanned Product Recall Alert Styles =====
+  scannedRecallBanner: {
+    backgroundColor: '#7F1D1D',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 15,
+    marginVertical: 12,
+    borderWidth: 3,
+    borderColor: '#DC2626',
+  },
+  scannedRecallHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  scannedRecallIcon: {
+    fontSize: 28,
+    marginRight: 10,
+  },
+  scannedRecallTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+  },
+  scannedRecallSubtitle: {
+    fontSize: 13,
+    color: '#FCA5A5',
+    marginTop: 2,
+  },
+  severityDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginLeft: 8,
+  },
+  scannedRecallContent: {
+    backgroundColor: '#991B1B',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  scannedRecallReason: {
+    fontSize: 14,
+    color: '#FEE2E2',
+    lineHeight: 20,
+    marginBottom: 6,
+  },
+  scannedRecallDate: {
+    fontSize: 12,
+    color: '#FCA5A5',
+    fontStyle: 'italic',
+  },
+  scannedRecallAction: {
+    backgroundColor: '#DC2626',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+  },
+  scannedRecallActionText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    lineHeight: 18,
+  },
+  viewRecallButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+  },
+  viewRecallButtonText: {
+    color: '#7F1D1D',
+    fontSize: 14,
+    fontWeight: '700',
+  },
 
   // ===== Allergen Styles =====
   allergenAlertBox: {
