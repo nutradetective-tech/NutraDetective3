@@ -1,6 +1,6 @@
 // services/HealthyAlternativesService.js
 // HYBRID APPROACH: Seed Database + API Fallback
-// Version 1.0 - Option 3 Implementation
+// Version 1.1 - With Barcode Verification
 // NO MANUAL CURATION NEEDED - Seed generated via AI, grows automatically!
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -519,7 +519,7 @@ class HealthyAlternativesService {
       
       // Step 3: Check seed database FIRST (fast, curated)
       console.log('🌱 Checking seed database...');
-      const seedAlternatives = this.findInSeedDatabase(category, currentScore, userAllergens);
+      const seedAlternatives = await this.findInSeedDatabase(category, currentScore, userAllergens);
       
       if (seedAlternatives.length > 0) {
         console.log('✅ Found', seedAlternatives.length, 'alternatives in SEED DATABASE');
@@ -562,10 +562,10 @@ class HealthyAlternativesService {
   }
   
   /**
-   * NEW: Find alternatives in seed database
+   * NEW: Find alternatives in seed database WITH BARCODE VERIFICATION
    * Ultra-fast, no API calls needed!
    */
-  static findInSeedDatabase(category, currentScore, userAllergens) {
+  static async findInSeedDatabase(category, currentScore, userAllergens) {
     // Get alternatives for this category from seed
     const seedData = SEED_ALTERNATIVES[category] || [];
     
@@ -576,8 +576,25 @@ class HealthyAlternativesService {
     
     console.log('   ✅ Seed data exists for category:', category, '(' + seedData.length + ' products)');
     
+    // ✅ NEW: Verify barcodes exist before showing alternatives
+    console.log('   🔍 Verifying barcodes are scannable...');
+    const verifiedProducts = [];
+    
+    for (const product of seedData) {
+      // Check if barcode actually exists in database
+      const isValid = await this.verifyBarcodeExists(product.barcode);
+      
+      if (isValid) {
+        verifiedProducts.push(product);
+      } else {
+        console.log(`   ⚠️ Skipping ${product.name} - barcode not in any database`);
+      }
+    }
+    
+    console.log(`   📊 Verified: ${verifiedProducts.length}/${seedData.length} products have working barcodes`);
+    
     // Filter out products with user allergens
-    const filtered = seedData.filter(product => {
+    const filtered = verifiedProducts.filter(product => {
       const containsAllergen = this.containsUserAllergensSimple(product, userAllergens);
       if (containsAllergen) {
         console.log('   ⏭️  Skipping', product.name, '(contains allergen)');
@@ -634,88 +651,88 @@ class HealthyAlternativesService {
    * Open Food Facts provides detailed category hierarchy
    */
   static extractMainCategory(product) {
-  const categories = product.categories || product.rawData?.categories || '';
-  const productName = (product.name || product.product_name || '').toLowerCase();
-  const ingredients = (product.ingredients_text || product.ingredientList || '').toLowerCase();
-  
-  // Check product name FIRST for obvious keywords
-  if (productName.includes('cola') || productName.includes('soda') || productName.includes('pepsi')) {
-    return 'sodas';
-  }
-  
-  // Check ingredients for carbonated water (indicates soda/beverage)
-  if (ingredients.includes('carbonated water') || ingredients.includes('carbonated')) {
-    return 'sodas';
-  }
-  if (productName.includes('cereal') || productName.includes('flakes') || productName.includes('granola')) {
-    return 'breakfast-cereals';
-  }
-  if (productName.includes('chip')) {
-    return 'chips';
-  }
-  if (productName.includes('cracker')) {
-    return 'crackers';
-  }
-  if (productName.includes('cookie') || productName.includes('biscuit')) {
-    return 'cookies';
-  }
-  
-  // Then check categories if available
-  if (!categories) return null;
-  
-  const categoryList = categories.toLowerCase().split(',').map(c => c.trim());
-  
-  // Priority categories (most specific first)
-  const categoryMap = {
-    // Spreads & Butters
-    'chocolate-spreads': 'chocolate-spreads',
-    'hazelnut-spreads': 'chocolate-spreads',
-    'breakfasts': 'chocolate-spreads',
-    'petit-déjeuners': 'chocolate-spreads',  // French support
-    'nut-butters': 'nut-butters',
-    'peanut-butters': 'nut-butters',
-    'almond-butters': 'nut-butters',
+    const categories = product.categories || product.rawData?.categories || '';
+    const productName = (product.name || product.product_name || '').toLowerCase();
+    const ingredients = (product.ingredients_text || product.ingredientList || '').toLowerCase();
     
-    // Breakfast
-    'breakfast-cereals': 'breakfast-cereals',
-    'granolas': 'breakfast-cereals',
-    'mueslis': 'breakfast-cereals',
-    'porridges': 'breakfast-cereals',
+    // Check product name FIRST for obvious keywords
+    if (productName.includes('cola') || productName.includes('soda') || productName.includes('pepsi')) {
+      return 'sodas';
+    }
     
-    // Snacks
-    'snack-bars': 'snack-bars',
-    'cereal-bars': 'snack-bars',
-    'protein-bars': 'snack-bars',
-    'energy-bars': 'snack-bars',
-    'chips': 'chips',
-    'crackers': 'crackers',
-    'cookies': 'cookies',
-    'biscuits': 'cookies',
+    // Check ingredients for carbonated water (indicates soda/beverage)
+    if (ingredients.includes('carbonated water') || ingredients.includes('carbonated')) {
+      return 'sodas';
+    }
+    if (productName.includes('cereal') || productName.includes('flakes') || productName.includes('granola')) {
+      return 'breakfast-cereals';
+    }
+    if (productName.includes('chip')) {
+      return 'chips';
+    }
+    if (productName.includes('cracker')) {
+      return 'crackers';
+    }
+    if (productName.includes('cookie') || productName.includes('biscuit')) {
+      return 'cookies';
+    }
     
-    // Beverages
-    'sodas': 'sodas',
-    'fruit-juices': 'fruit-juices',
-    'plant-based-milk': 'plant-based-milk',
-    'yogurts': 'yogurts',
+    // Then check categories if available
+    if (!categories) return null;
     
-    // Breads & Grains
-    'breads': 'breads',
-    'whole-grain-breads': 'breads',
-    'pastas': 'pastas',
-    'rice': 'rice',
-  };
-  
-  // Find the most specific matching category
-  for (const cat of categoryList) {
-    for (const [key, value] of Object.entries(categoryMap)) {
-      if (cat.includes(key)) {
-        return value;
+    const categoryList = categories.toLowerCase().split(',').map(c => c.trim());
+    
+    // Priority categories (most specific first)
+    const categoryMap = {
+      // Spreads & Butters
+      'chocolate-spreads': 'chocolate-spreads',
+      'hazelnut-spreads': 'chocolate-spreads',
+      'breakfasts': 'chocolate-spreads',
+      'petit-déjeuners': 'chocolate-spreads',  // French support
+      'nut-butters': 'nut-butters',
+      'peanut-butters': 'nut-butters',
+      'almond-butters': 'nut-butters',
+      
+      // Breakfast
+      'breakfast-cereals': 'breakfast-cereals',
+      'granolas': 'breakfast-cereals',
+      'mueslis': 'breakfast-cereals',
+      'porridges': 'breakfast-cereals',
+      
+      // Snacks
+      'snack-bars': 'snack-bars',
+      'cereal-bars': 'snack-bars',
+      'protein-bars': 'snack-bars',
+      'energy-bars': 'snack-bars',
+      'chips': 'chips',
+      'crackers': 'crackers',
+      'cookies': 'cookies',
+      'biscuits': 'cookies',
+      
+      // Beverages
+      'sodas': 'sodas',
+      'fruit-juices': 'fruit-juices',
+      'plant-based-milk': 'plant-based-milk',
+      'yogurts': 'yogurts',
+      
+      // Breads & Grains
+      'breads': 'breads',
+      'whole-grain-breads': 'breads',
+      'pastas': 'pastas',
+      'rice': 'rice',
+    };
+    
+    // Find the most specific matching category
+    for (const cat of categoryList) {
+      for (const [key, value] of Object.entries(categoryMap)) {
+        if (cat.includes(key)) {
+          return value;
+        }
       }
     }
-  }
-  
-  // Fallback to first category if no match
-  return categoryList[0] || null;
+    
+    // Fallback to first category if no match
+    return categoryList[0] || null;
   }
   
   /**
@@ -916,6 +933,59 @@ class HealthyAlternativesService {
     } catch (error) {
       return null;
     }
+  }
+  
+  /**
+   * 🔍 VERIFY BARCODE EXISTS IN DATABASE
+   * Quick check against Open Food Facts only (fastest API)
+   * Returns true if barcode is valid and scannable
+   */
+  static async verifyBarcodeExists(barcode) {
+    try {
+      const variations = this.getBarcodeVariations(barcode);
+      
+      for (const currentBarcode of variations) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+        
+        try {
+          const response = await fetch(
+            `https://world.openfoodfacts.org/api/v0/product/${currentBarcode}.json`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timeoutId);
+          
+          const data = await response.json();
+          
+          if (data.status === 1 && data.product) {
+            console.log(`   ✅ Barcode verified: ${currentBarcode}`);
+            return true;
+          }
+        } catch (error) {
+          clearTimeout(timeoutId);
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+  
+  /**
+   * Get barcode variations (UPC-A ↔ EAN-13)
+   */
+  static getBarcodeVariations(barcode) {
+    const cleanBarcode = barcode.trim();
+    const variations = [cleanBarcode];
+    
+    if (cleanBarcode.length === 12) {
+      variations.push('0' + cleanBarcode);
+    } else if (cleanBarcode.length === 13 && cleanBarcode.startsWith('0')) {
+      variations.push(cleanBarcode.substring(1));
+    }
+    
+    return variations;
   }
 }
 
