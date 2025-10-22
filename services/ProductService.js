@@ -93,6 +93,73 @@ class ProductService {
     EDAMAM_KEY: ''
   };
 
+/**
+   * 🔢 UNIVERSAL BARCODE NORMALIZER
+   * Converts between UPC-A (12-digit) and EAN-13 (13-digit) formats
+   * Returns array of barcode variations to try
+   */
+  static getBarcodeVariations(barcode) {
+    const cleanBarcode = barcode.trim();
+    const variations = [cleanBarcode]; // Always try original first
+    
+    console.log('🔢 Analyzing barcode format:', cleanBarcode);
+    console.log('   Length:', cleanBarcode.length, 'digits');
+    
+    if (cleanBarcode.length === 12) {
+      // UPC-A: Add leading zero to convert to EAN-13
+      const ean13 = '0' + cleanBarcode;
+      variations.push(ean13);
+      console.log('   Format: UPC-A (12-digit)');
+      console.log('   Will also try EAN-13:', ean13);
+    } else if (cleanBarcode.length === 13) {
+      // EAN-13: Remove leading zero if it exists to try UPC-A
+      if (cleanBarcode.startsWith('0')) {
+        const upcA = cleanBarcode.substring(1);
+        variations.push(upcA);
+        console.log('   Format: EAN-13 (13-digit)');
+        console.log('   Will also try UPC-A:', upcA);
+      } else {
+        console.log('   Format: EAN-13 (13-digit, non-US)');
+      }
+    } else if (cleanBarcode.length === 8) {
+      console.log('   Format: EAN-8 (8-digit)');
+    } else {
+      console.log('   ⚠️  Format: Unknown length');
+    }
+    
+    console.log('   Total variations to try:', variations.length);
+    return variations;
+  }
+
+  /**
+   * 🔍 SMART API CALLER
+   * Tries all barcode variations with a given API function
+   * Returns first successful result
+   */
+  static async tryBarcodeVariations(apiFetchFunction, barcode, apiName) {
+    const variations = this.getBarcodeVariations(barcode);
+    
+    for (let i = 0; i < variations.length; i++) {
+      const currentBarcode = variations[i];
+      console.log(`   🔄 ${apiName}: Trying variation ${i + 1}/${variations.length}: ${currentBarcode}`);
+      
+      try {
+        const result = await apiFetchFunction(currentBarcode);
+        if (result) {
+          console.log(`   ✅ ${apiName}: SUCCESS with barcode format: ${currentBarcode}`);
+          return result;
+        } else {
+          console.log(`   ❌ ${apiName}: Not found with ${currentBarcode}`);
+        }
+      } catch (error) {
+        console.log(`   ⚠️  ${apiName}: Error with ${currentBarcode}:`, error.message);
+      }
+    }
+    
+    console.log(`   ❌ ${apiName}: Failed with all ${variations.length} barcode variations`);
+    return null;
+  }
+
   /**
    * Main function called by App.js - maintains backward compatibility
    * ENHANCED: Now includes product images, detailed additives, and product caching
@@ -155,37 +222,47 @@ class ProductService {
       return merged;
     };
 
-    // Try Open Food Facts first (no API key needed)
+    // Try Open Food Facts first (no API key needed) - WITH BARCODE VARIATIONS
     console.log('📡 Trying Open Food Facts...');
-
-    // Add timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-    try {
-      const response = await fetch(
-        `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`,
-        { signal: controller.signal }
-      );
-      clearTimeout(timeoutId);
-      const data = await response.json();
-      console.log('Open Food Facts response status:', data.status);
+    
+    const barcodeVariations = this.getBarcodeVariations(barcode);
+    
+    for (const currentBarcode of barcodeVariations) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       
-      if (data.status === 1 && data.product) {
-        product = data.product;
-        product.ingredients_text = getEnglishText(product, 'ingredients_text');
-        source = 'Open Food Facts';
-        sourcesUsed.push('Open Food Facts');
-        console.log('✅ Found in Open Food Facts:', product.product_name);
-      } else {
-        console.log('❌ Not found in Open Food Facts');
+      try {
+        console.log(`   🔄 Trying barcode: ${currentBarcode}`);
+        const response = await fetch(
+          `https://world.openfoodfacts.org/api/v0/product/${currentBarcode}.json`,
+          { signal: controller.signal }
+        );
+        clearTimeout(timeoutId);
+        const data = await response.json();
+        
+        if (data.status === 1 && data.product) {
+          product = data.product;
+          product.ingredients_text = getEnglishText(product, 'ingredients_text');
+          source = 'Open Food Facts';
+          sourcesUsed.push('Open Food Facts');
+          console.log('✅ Found in Open Food Facts:', product.product_name);
+          console.log('✅ Working barcode format:', currentBarcode);
+          break; // Success! Stop trying other variations
+        } else {
+          console.log(`   ❌ Not found with barcode: ${currentBarcode}`);
+        }
+      } catch (error) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          console.log(`   ⏱️ Timeout with barcode: ${currentBarcode}`);
+        } else {
+          console.error(`   ⚠️  Error with barcode ${currentBarcode}:`, error.message);
+        }
       }
-    } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log('⏱️ Open Food Facts timeout - taking too long');
-      } else {
-        console.error('Open Food Facts error:', error);
-      }
+    }
+    
+    if (!product) {
+      console.log('❌ Not found in Open Food Facts with any barcode variation');
     }
 
     // Check if we need more nutrition data
@@ -198,7 +275,11 @@ class ProductService {
     if (needsMoreData && this.API_KEYS.USDA && this.API_KEYS.USDA !== 'DEMO_KEY') {
       try {
         console.log('📡 Trying USDA database...');
-        const usdaProduct = await this.fetchFromUSDA(barcode);
+        const usdaProduct = await this.tryBarcodeVariations(
+          (bc) => this.fetchFromUSDA(bc),
+          barcode,
+          'USDA'
+        );
         if (usdaProduct) {
           if (!product) {
             product = usdaProduct;
@@ -223,7 +304,11 @@ class ProductService {
     if (needsMoreData && this.API_KEYS.NUTRITIONIX_ID) {
       try {
         console.log('📡 Trying Nutritionix...');
-        const nutritionixProduct = await this.fetchFromNutritionix(barcode);
+        const nutritionixProduct = await this.tryBarcodeVariations(
+          (bc) => this.fetchFromNutritionix(bc),
+          barcode,
+          'Nutritionix'
+        );
         if (nutritionixProduct) {
           if (!product) {
             product = nutritionixProduct;
@@ -247,7 +332,11 @@ class ProductService {
     if (needsMoreData && this.API_KEYS.SPOONACULAR) {
       try {
         console.log('📡 Trying Spoonacular...');
-        const spoonProduct = await this.fetchFromSpoonacular(barcode);
+        const spoonProduct = await this.tryBarcodeVariations(
+          (bc) => this.fetchFromSpoonacular(bc),
+          barcode,
+          'Spoonacular'
+        );
         if (spoonProduct) {
           if (!product) {
             product = spoonProduct;
