@@ -1,6 +1,7 @@
 // screens/RecallFeedScreen.js
 // NutraDetective - Recall News Feed
 // Shows latest FDA/USDA recalls with search and share
+// Version 3.0 - Merged FDA + USDA with source indicators
 
 import React, { useState, useEffect } from 'react';
 import {
@@ -14,18 +15,22 @@ import {
   Alert,
   Share,
   ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import RecallService from '../services/RecallService';
+import BottomNav from '../components/BottomNav';
 
-const RecallFeedScreen = () => {
+const RecallFeedScreen = ({ setActiveTab }) => {
   const [recalls, setRecalls] = useState([]);
   const [filteredRecalls, setFilteredRecalls] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [showArchive, setShowArchive] = useState(false);
 
   // Load recalls on mount
   useEffect(() => {
@@ -33,28 +38,70 @@ const RecallFeedScreen = () => {
     loadUpdateTime();
   }, []);
 
-  // Filter recalls when search changes
+  // Filter recalls when search changes or filter changes
   useEffect(() => {
-    if (searchQuery.trim() === '') {
-      setFilteredRecalls(recalls);
-    } else {
+    applyFilters();
+  }, [searchQuery, recalls, activeFilter, showArchive]);
+
+  const applyFilters = () => {
+    let filtered = [...recalls];
+
+    // 1. Filter by date (default: last year only)
+    if (!showArchive) {
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+      
+      filtered = filtered.filter(recall => {
+        const recallDate = parseRecallDate(recall.recallDate);
+        return recallDate >= oneYearAgo;
+      });
+    }
+
+    // 2. Filter by severity
+    if (activeFilter !== 'all') {
+      filtered = filtered.filter(recall => recall.severity === activeFilter);
+    }
+
+    // 3. Filter by search query
+    if (searchQuery.trim() !== '') {
       const query = searchQuery.toLowerCase();
-      const filtered = recalls.filter(recall =>
+      filtered = filtered.filter(recall =>
         recall.productName.toLowerCase().includes(query) ||
         recall.brand.toLowerCase().includes(query) ||
         recall.reason.toLowerCase().includes(query) ||
         recall.company.toLowerCase().includes(query)
       );
-      setFilteredRecalls(filtered);
     }
-  }, [searchQuery, recalls]);
+
+    setFilteredRecalls(filtered);
+  };
+
+  const parseRecallDate = (dateString) => {
+    if (!dateString || dateString === 'Date unknown') return new Date(0);
+    
+    const year = dateString.substring(0, 4);
+    const month = dateString.substring(4, 6);
+    const day = dateString.substring(6, 8);
+    
+    return new Date(`${year}-${month}-${day}`);
+  };
+
+  const formatRecallDate = (dateString) => {
+    if (!dateString || dateString === 'Date unknown') return 'Date unknown';
+    
+    const date = parseRecallDate(dateString);
+    
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+  };
 
   const loadRecalls = async () => {
     try {
       setLoading(true);
       const feed = await RecallService.fetchRecallFeed();
       setRecalls(feed);
-      setFilteredRecalls(feed);
       await loadUpdateTime();
     } catch (error) {
       console.error('Error loading recalls:', error);
@@ -73,23 +120,49 @@ const RecallFeedScreen = () => {
     setRefreshing(true);
     const feed = await RecallService.refreshFeed();
     setRecalls(feed);
-    setFilteredRecalls(feed);
     await loadUpdateTime();
     setRefreshing(false);
   };
 
+  const getOfficialLink = (recall) => {
+    // Generate link based on source
+    if (recall.source === 'USDA') {
+      // USDA link
+      if (recall.recallNumber && recall.recallNumber !== 'N/A') {
+        return `https://www.fsis.usda.gov/recalls/${recall.recallNumber}`;
+      }
+      return 'https://www.fsis.usda.gov/recalls';
+    } else {
+      // FDA link
+      if (recall.recallNumber && recall.recallNumber !== 'N/A') {
+        return `https://www.accessdata.fda.gov/scripts/enforcement/enforce_rpt-Product-Tabs.cfm?recall_number=${recall.recallNumber}`;
+      }
+      return 'https://www.fda.gov/safety/recalls-market-withdrawals-safety-alerts';
+    }
+  };
+
+  const getSourceName = (source) => {
+    return source === 'USDA' ? 'USDA' : 'FDA';
+  };
+
   const handleShare = async (recall) => {
+    const formattedDate = formatRecallDate(recall.recallDate);
+    const officialLink = getOfficialLink(recall);
+    const sourceName = getSourceName(recall.source);
+    
     const shareMessage = 
       `🚨 FOOD RECALL ALERT\n\n` +
       `Product: ${recall.productName}\n` +
       `Brand: ${recall.brand}\n` +
       `Reason: ${recall.reason}\n` +
-      `Classification: ${recall.classification}\n` +
-      `Date: ${recall.recallDate}\n\n` +
+      `Severity: ${getSeverityLabel(recall.severity)}\n` +
+      `Date: ${formattedDate}\n` +
+      `Source: ${sourceName}\n\n` +
       `${recall.actionToTake}\n\n` +
-      `Stay informed with NutraDetective 📱\n` +
-      `Download: https://nutradetective.com\n\n` +
-      `Source: ${recall.source} • ${recall.recallNumber}`;
+      `📋 Official ${sourceName} Details:\n${officialLink}\n\n` +
+      `🔍 Stay safe - scan your food with NutraDetective:\n` +
+      `https://nutradetective.com\n\n` +
+      `#FoodSafety #RecallAlert #${sourceName}`;
 
     try {
       await Share.share({
@@ -98,6 +171,19 @@ const RecallFeedScreen = () => {
       });
     } catch (error) {
       console.error('Error sharing:', error);
+    }
+  };
+
+  const getSeverityLabel = (severity) => {
+    switch (severity) {
+      case 'critical':
+        return 'Dangerous';
+      case 'high':
+        return 'Warning';
+      case 'medium':
+        return 'Notice';
+      default:
+        return 'Alert';
     }
   };
 
@@ -121,183 +207,241 @@ const RecallFeedScreen = () => {
       case 'high':
         return '⚠️';
       case 'medium':
-        return '⚡';
+        return 'ℹ️';
       default:
         return 'ℹ️';
     }
   };
 
-  const RecallCard = ({ recall }) => (
-    <View style={styles.recallCard}>
-      {/* Header with severity badge */}
-      <View style={styles.cardHeader}>
-        <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(recall.severity) }]}>
-          <Text style={styles.severityText}>
-            {getSeverityIcon(recall.severity)} {recall.classification}
-          </Text>
+  const getSourceColor = (source) => {
+    return source === 'USDA' ? '#10B981' : '#3B82F6';
+  };
+
+  const RecallCard = ({ recall }) => {
+    const formattedDate = formatRecallDate(recall.recallDate);
+    const officialLink = getOfficialLink(recall);
+    const sourceName = getSourceName(recall.source);
+
+    return (
+      <View style={styles.recallCard}>
+        {/* Header with severity badge and source badge */}
+        <View style={styles.cardHeader}>
+          <View style={styles.badgeContainer}>
+            <View style={[styles.severityBadge, { backgroundColor: getSeverityColor(recall.severity) }]}>
+              <Text style={styles.severityText}>
+                {getSeverityIcon(recall.severity)} {getSeverityLabel(recall.severity)}
+              </Text>
+            </View>
+            <View style={[styles.sourceBadge, { backgroundColor: getSourceColor(recall.source) }]}>
+              <Text style={styles.sourceText}>{sourceName}</Text>
+            </View>
+          </View>
+          <Text style={styles.recallDate}>{formattedDate}</Text>
         </View>
-        <Text style={styles.recallDate}>{recall.recallDate}</Text>
+
+        {/* Product info */}
+        <Text style={styles.productName}>{recall.productName}</Text>
+        <Text style={styles.brandName}>{recall.brand}</Text>
+
+        {/* Reason */}
+        <View style={styles.reasonSection}>
+          <Text style={styles.reasonLabel}>Recall Reason:</Text>
+          <Text style={styles.reasonText}>{recall.reason}</Text>
+        </View>
+
+        {/* Company */}
+        <Text style={styles.companyText}>Company: {recall.company}</Text>
+
+        {/* Action */}
+        <View style={styles.actionBox}>
+          <Text style={styles.actionText}>{recall.actionToTake}</Text>
+        </View>
+
+        {/* Buttons */}
+        <View style={styles.buttonRow}>
+          <TouchableOpacity
+            style={styles.detailsButton}
+            onPress={() => {
+              Alert.alert(
+                'Recall Details',
+                `${recall.productName}\n\n` +
+                `Company: ${recall.company}\n` +
+                `Distribution: ${recall.distributionPattern}\n` +
+                `Recall Number: ${recall.recallNumber}\n` +
+                `Recall Date: ${formattedDate}\n` +
+                `Source: ${sourceName}\n\n` +
+                `Details: ${recall.details || 'No additional details'}\n\n` +
+                `Official ${sourceName} Link:\n${officialLink}`,
+                [
+                  { text: 'Close' },
+                  { 
+                    text: `View on ${sourceName}`, 
+                    onPress: () => Linking.openURL(officialLink)
+                  }
+                ]
+              );
+            }}
+          >
+            <Ionicons name="information-circle-outline" size={20} color="#667EEA" />
+            <Text style={styles.detailsButtonText}>Details</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.shareButton}
+            onPress={() => handleShare(recall)}
+          >
+            <Ionicons name="share-social-outline" size={20} color="#FFFFFF" />
+            <Text style={styles.shareButtonText}>Share</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-
-      {/* Product info */}
-      <Text style={styles.productName}>{recall.productName}</Text>
-      <Text style={styles.brandName}>{recall.brand}</Text>
-
-      {/* Reason */}
-      <View style={styles.reasonSection}>
-        <Text style={styles.reasonLabel}>Reason:</Text>
-        <Text style={styles.reasonText}>{recall.reason}</Text>
-      </View>
-
-      {/* Company */}
-      <Text style={styles.companyText}>Company: {recall.company}</Text>
-
-      {/* Action */}
-      <View style={styles.actionBox}>
-        <Text style={styles.actionText}>{recall.actionToTake}</Text>
-      </View>
-
-      {/* Buttons */}
-      <View style={styles.buttonRow}>
-        <TouchableOpacity
-          style={styles.detailsButton}
-          onPress={() => {
-            Alert.alert(
-              'Recall Details',
-              `${recall.productName}\n\n` +
-              `Company: ${recall.company}\n` +
-              `Distribution: ${recall.distributionPattern}\n` +
-              `Recall Number: ${recall.recallNumber}\n\n` +
-              `Details: ${recall.details || 'No additional details'}\n\n` +
-              `Source: ${recall.officialLink}`,
-              [{ text: 'OK' }]
-            );
-          }}
-        >
-          <Ionicons name="information-circle-outline" size={20} color="#667EEA" />
-          <Text style={styles.detailsButtonText}>Details</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={() => handleShare(recall)}
-        >
-          <Ionicons name="share-social-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.shareButtonText}>Share</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.headerTitle}>🚨 Safety Alerts</Text>
-          {lastUpdate && (
-            <Text style={styles.headerSubtitle}>
-              Updated {lastUpdate.minutesAgo < 1 ? 'just now' : 
-                      lastUpdate.minutesAgo < 60 ? `${lastUpdate.minutesAgo}m ago` :
-                      `${Math.floor(lastUpdate.minutesAgo / 60)}h ago`}
-            </Text>
+    <View style={{ flex: 1 }}>
+      <SafeAreaView style={styles.container}>
+        {/* Header */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.headerTitle}>🚨 Safety Alerts</Text>
+            {lastUpdate && (
+              <Text style={styles.headerSubtitle}>
+                Updated {lastUpdate.minutesAgo < 1 ? 'just now' : 
+                        lastUpdate.minutesAgo < 60 ? `${lastUpdate.minutesAgo}m ago` :
+                        `${Math.floor(lastUpdate.minutesAgo / 60)}h ago`}
+              </Text>
+            )}
+          </View>
+          <View style={styles.headerBadge}>
+            <Text style={styles.headerBadgeText}>{filteredRecalls.length}</Text>
+          </View>
+        </View>
+
+        {/* Search Bar */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search recalls by product, brand, or reason..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholderTextColor="#9CA3AF"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
           )}
         </View>
-        <View style={styles.headerBadge}>
-          <Text style={styles.headerBadgeText}>{recalls.length}</Text>
-        </View>
-      </View>
 
-      {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search recalls by product, brand, or reason..."
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholderTextColor="#9CA3AF"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+        {/* Filter Chips */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterChips}
+          contentContainerStyle={styles.filterChipsContent}
+        >
+          <TouchableOpacity
+            style={[styles.filterChip, activeFilter === 'all' && styles.filterChipActive]}
+            onPress={() => setActiveFilter('all')}
+          >
+            <Text style={[styles.filterChipText, activeFilter === 'all' && styles.filterChipTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, activeFilter === 'critical' && styles.filterChipActive]}
+            onPress={() => setActiveFilter('critical')}
+          >
+            <Text style={[styles.filterChipText, activeFilter === 'critical' && styles.filterChipTextActive]}>
+              🚨 Dangerous
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, activeFilter === 'high' && styles.filterChipActive]}
+            onPress={() => setActiveFilter('high')}
+          >
+            <Text style={[styles.filterChipText, activeFilter === 'high' && styles.filterChipTextActive]}>
+              ⚠️ Warning
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, activeFilter === 'medium' && styles.filterChipActive]}
+            onPress={() => setActiveFilter('medium')}
+          >
+            <Text style={[styles.filterChipText, activeFilter === 'medium' && styles.filterChipTextActive]}>
+              ℹ️ Notice
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {/* Archive Toggle */}
+        {!showArchive && (
+          <TouchableOpacity 
+            style={styles.archiveButton}
+            onPress={() => setShowArchive(true)}
+          >
+            <Ionicons name="archive-outline" size={18} color="#667EEA" />
+            <Text style={styles.archiveButtonText}>
+              Showing last year • Tap to view archive
+            </Text>
           </TouchableOpacity>
         )}
-      </View>
+        {showArchive && (
+          <TouchableOpacity 
+            style={styles.archiveButtonActive}
+            onPress={() => setShowArchive(false)}
+          >
+            <Ionicons name="close-circle-outline" size={18} color="#667EEA" />
+            <Text style={styles.archiveButtonText}>
+              Showing all time • Tap to hide archive
+            </Text>
+          </TouchableOpacity>
+        )}
 
-      {/* Filter Chips */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterChips}
-        contentContainerStyle={styles.filterChipsContent}
-      >
-        <TouchableOpacity
-          style={[styles.filterChip, searchQuery === '' && styles.filterChipActive]}
-          onPress={() => setSearchQuery('')}
-        >
-          <Text style={[styles.filterChipText, searchQuery === '' && styles.filterChipTextActive]}>
-            All ({recalls.length})
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.filterChip}
-          onPress={async () => {
-            const critical = await RecallService.getRecallsBySeverity('critical');
-            setFilteredRecalls(critical);
-            setSearchQuery('');
-          }}
-        >
-          <Text style={styles.filterChipText}>🚨 Critical</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.filterChip}
-          onPress={async () => {
-            const high = await RecallService.getRecallsBySeverity('high');
-            setFilteredRecalls(high);
-            setSearchQuery('');
-          }}
-        >
-          <Text style={styles.filterChipText}>⚠️ High</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        {/* Recall List */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#667EEA" />
+            <Text style={styles.loadingText}>Loading recalls...</Text>
+          </View>
+        ) : filteredRecalls.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyIcon}>🔍</Text>
+            <Text style={styles.emptyTitle}>No recalls found</Text>
+            <Text style={styles.emptyText}>
+              {searchQuery ? 'Try a different search term' : 
+               activeFilter !== 'all' ? 'No recalls in this category' :
+               'No recalls to display'}
+            </Text>
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.scrollView}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefresh}
+                tintColor="#667EEA"
+              />
+            }
+          >
+            <Text style={styles.resultsCount}>
+              {filteredRecalls.length} recall{filteredRecalls.length !== 1 ? 's' : ''} found
+            </Text>
+            {filteredRecalls.map((recall, index) => (
+              <RecallCard key={recall.id || index} recall={recall} />
+            ))}
+            <View style={styles.bottomPadding} />
+          </ScrollView>
+        )}
+      </SafeAreaView>
 
-      {/* Recall List */}
-      {loading ? (
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#667EEA" />
-          <Text style={styles.loadingText}>Loading recalls...</Text>
-        </View>
-      ) : filteredRecalls.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyIcon}>🔍</Text>
-          <Text style={styles.emptyTitle}>No recalls found</Text>
-          <Text style={styles.emptyText}>
-            {searchQuery ? 'Try a different search term' : 'No recalls to display'}
-          </Text>
-        </View>
-      ) : (
-        <ScrollView
-          style={styles.scrollView}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefresh}
-              tintColor="#667EEA"
-            />
-          }
-        >
-          <Text style={styles.resultsCount}>
-            {filteredRecalls.length} recall{filteredRecalls.length !== 1 ? 's' : ''} found
-          </Text>
-          {filteredRecalls.map((recall, index) => (
-            <RecallCard key={recall.id || index} recall={recall} />
-          ))}
-          <View style={styles.bottomPadding} />
-        </ScrollView>
-      )}
-    </SafeAreaView>
+      {/* Bottom Navigation */}
+      <BottomNav activeTab="alerts" setActiveTab={setActiveTab} />
+    </View>
   );
 };
 
@@ -386,6 +530,33 @@ const styles = StyleSheet.create({
   filterChipTextActive: {
     color: '#FFFFFF',
   },
+  archiveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#EEF2FF',
+    marginHorizontal: 15,
+    marginBottom: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 8,
+  },
+  archiveButtonActive: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEF3C7',
+    marginHorizontal: 15,
+    marginBottom: 10,
+    paddingVertical: 10,
+    borderRadius: 8,
+    gap: 8,
+  },
+  archiveButtonText: {
+    fontSize: 13,
+    color: '#667EEA',
+    fontWeight: '600',
+  },
   scrollView: {
     flex: 1,
   },
@@ -414,6 +585,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12,
   },
+  badgeContainer: {
+    flexDirection: 'row',
+    gap: 6,
+  },
   severityBadge: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -422,6 +597,16 @@ const styles = StyleSheet.create({
   severityText: {
     color: '#FFFFFF',
     fontSize: 12,
+    fontWeight: 'bold',
+  },
+  sourceBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  sourceText: {
+    color: '#FFFFFF',
+    fontSize: 11,
     fontWeight: 'bold',
   },
   recallDate: {
@@ -538,7 +723,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   bottomPadding: {
-    height: 20,
+    height: 80,
   },
 });
 
