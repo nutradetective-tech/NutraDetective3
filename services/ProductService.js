@@ -86,8 +86,6 @@ class ProductService {
   // API Keys - Get these free from each service
   static API_KEYS = {
     USDA: '5QlF40l69GTeey5t3lPgc02BcWOthCTg6ZaAbZW9',
-    NUTRITIONIX_ID: '393c1557',
-    NUTRITIONIX_KEY: '6cefab30a7a318a0cfb93fa2263ec883',
     SPOONACULAR: '1f66fca067fe49bca59115e88fde84ac',
     EDAMAM_ID: '',
     EDAMAM_KEY: ''
@@ -297,34 +295,6 @@ class ProductService {
         }
       } catch (error) {
         console.error('USDA error:', error);
-      }
-    }
-
-    // Try Nutritionix for missing data
-    if (needsMoreData && this.API_KEYS.NUTRITIONIX_ID) {
-      try {
-        console.log('📡 Trying Nutritionix...');
-        const nutritionixProduct = await this.tryBarcodeVariations(
-          (bc) => this.fetchFromNutritionix(bc),
-          barcode,
-          'Nutritionix'
-        );
-        if (nutritionixProduct) {
-          if (!product) {
-            product = nutritionixProduct;
-            source = 'Nutritionix';
-          } else {
-            product.product_name = product.product_name || nutritionixProduct.product_name;
-            product.brands = product.brands || nutritionixProduct.brands;
-            product.ingredients_text = product.ingredients_text || nutritionixProduct.ingredients_text;
-            product.nutriments = mergeNutriments(product.nutriments, nutritionixProduct.nutriments);
-            product.image_front_url = product.image_front_url || nutritionixProduct.image_front_url;
-          }
-          sourcesUsed.push('Nutritionix');
-          console.log('✅ Data from Nutritionix merged');
-        }
-      } catch (error) {
-        console.error('Nutritionix error:', error);
       }
     }
 
@@ -735,65 +705,6 @@ class ProductService {
       };
     }
     return null;
-  }
-
-  /**
-   * Nutritionix API
-   */
-  static async fetchFromNutritionix(barcode) {
-    try {
-      const response = await fetch(
-        `https://trackapi.nutritionix.com/v2/search/item?upc=${barcode}`,
-        {
-          headers: {
-            'x-app-id': this.API_KEYS.NUTRITIONIX_ID,
-            'x-app-key': this.API_KEYS.NUTRITIONIX_KEY
-          }
-        }
-      );
-      
-      if (!response.ok) {
-        console.log('Nutritionix response not OK:', response.status);
-        return null;
-      }
-      
-      const data = await response.json();
-      
-      if (!data || !data.foods || data.foods.length === 0) {
-        console.log('❌ Not found in Nutritionix');
-        return null;
-      }
-      
-      const food = data.foods[0];
-      
-      if (!food.serving_weight_grams || food.serving_weight_grams === 0) {
-        console.log('Missing serving weight in Nutritionix data');
-        return null;
-      }
-      
-      const servingWeight = food.serving_weight_grams || 100;
-      
-      return {
-        product_name: food.food_name || 'Unknown Product',
-        brands: food.brand_name || 'Unknown Brand',
-        nutriments: {
-          'sugars_100g': food.nf_sugars ? (food.nf_sugars / servingWeight) * 100 : 0,
-          'sodium_100g': food.nf_sodium ? (food.nf_sodium / servingWeight) * 100 / 1000 : 0,
-          'saturated-fat_100g': food.nf_saturated_fat ? (food.nf_saturated_fat / servingWeight) * 100 : 0,
-          'fiber_100g': food.nf_dietary_fiber ? (food.nf_dietary_fiber / servingWeight) * 100 : 0,
-          'proteins_100g': food.nf_protein ? (food.nf_protein / servingWeight) * 100 : 0,
-          'energy-kcal_100g': food.nf_calories ? (food.nf_calories / servingWeight) * 100 : 0,
-          'carbohydrates_100g': food.nf_total_carbohydrate ? (food.nf_total_carbohydrate / servingWeight) * 100 : 0,
-          'fat_100g': food.nf_total_fat ? (food.nf_total_fat / servingWeight) * 100 : 0
-        },
-        ingredients_text: food.nf_ingredient_statement || '',
-        categories: '',
-        image_front_url: food.photo ? food.photo.thumb : null
-      };
-    } catch (error) {
-      console.error('Nutritionix API error:', error);
-      return null;
-    }
   }
 
   /**

@@ -29,78 +29,97 @@ class USDRecallService {
 
       console.log('📡 Fetching fresh USDA recall data...');
 
-      // USDA FSIS Recall API
-      // NOTE: This endpoint structure is based on USDA documentation
-      // If this fails, the endpoint may need adjustment
-      const url = 'https://www.fsis.usda.gov/api/recalls?limit=50&sort=recallDate:desc';
+      // Try primary USDA endpoint (temporarily single attempt due to gov shutdown)
+      const possibleUrls = [
+        'https://www.fsis.usda.gov/fsis/api/recall/v/1'
+      ];
 
-      // Attempt 1
-      let lastError = null;
-      for (let attempt = 1; attempt <= 3; attempt++) {
-        try {
-          console.log(`🔄 Attempt ${attempt} of 3...`);
+      // Try each URL with single quick attempt
+      for (const url of possibleUrls) {
+        console.log(`🔗 Trying endpoint: ${url}`);
+        
+        for (let attempt = 1; attempt <= 1; attempt++) { // Single attempt during shutdown
+          try {
+            console.log(`🔄 Attempt ${attempt} of 1 (10s timeout)...`);
 
-          const response = await this.fetchWithTimeout(url, 30000); // 30 sec timeout
+            const response = await this.fetchWithTimeout(url, 10000); // 10 sec timeout
 
-          if (!response.ok) {
-            console.error('❌ USDA API returned status:', response.status);
-            throw new Error(`HTTP ${response.status}`);
-          }
+            if (!response.ok) {
+              console.error(`❌ USDA API returned status: ${response.status}`);
+              throw new Error(`HTTP ${response.status}`);
+            }
 
-          const data = await response.json();
+            const data = await response.json();
+            console.log('📦 Received response, parsing...');
 
-          if (!data || !Array.isArray(data)) {
-            console.log('⚠️  No recalls found in USDA response');
-            return [];
-          }
+            // Handle different possible response formats
+            let recalls = [];
+            if (Array.isArray(data)) {
+              recalls = data;
+            } else if (data.results && Array.isArray(data.results)) {
+              recalls = data.results;
+            } else if (data.data && Array.isArray(data.data)) {
+              recalls = data.data;
+            } else {
+              console.log('⚠️  Unexpected response format:', Object.keys(data));
+              throw new Error('Unexpected response format');
+            }
 
-          console.log('✅ Retrieved', data.length, 'recalls from USDA');
+            if (recalls.length === 0) {
+              console.log('⚠️  No recalls found in USDA response');
+              throw new Error('Empty response');
+            }
 
-          // Transform USDA data into our standard format
-          const recalls = data.map((recall, index) => ({
-            id: recall.recallNumber || `usda-recall-${index}`,
-            productName: recall.productName || recall.product || 'Unknown Product',
-            brand: this.extractBrand(recall.productName || recall.product),
-            reason: recall.recallReason || recall.reason || 'Reason not specified',
-            classification: recall.classification || this.mapUSDAClassification(recall.healthRisk),
-            severity: this.getSeverityFromUSDAClass(recall.classification || recall.healthRisk),
-            recallDate: this.formatUSDADate(recall.recallDate || recall.date),
-            recallNumber: recall.recallNumber || 'N/A',
-            company: recall.recallingFirm || recall.company || 'Unknown',
-            distributionPattern: recall.distribution || 'Unknown',
-            actionToTake: this.getActionFromSeverity(this.getSeverityFromUSDAClass(recall.classification || recall.healthRisk)),
-            details: recall.productDescription || '',
-            source: 'USDA',
-            officialLink: `https://www.fsis.usda.gov/recalls/${recall.recallNumber || ''}`
-          }));
+            console.log('✅ Retrieved', recalls.length, 'recalls from USDA');
 
-          // Cache the feed
-          await this.cacheUSDAFeed(recalls);
+            // Transform USDA data into our standard format
+            const transformedRecalls = recalls.slice(0, 50).map((recall, index) => ({
+              id: recall.recallNumber || recall.recall_number || `usda-recall-${index}`,
+              productName: recall.productName || recall.product_description || recall.product || 'Unknown Product',
+              brand: this.extractBrand(recall.productName || recall.product_description || recall.product),
+              reason: recall.recallReason || recall.reason_for_recall || recall.reason || 'Reason not specified',
+              classification: recall.classification || this.mapUSDAClassification(recall.healthRisk || recall.health_risk),
+              severity: this.getSeverityFromUSDAClass(recall.classification || recall.healthRisk || recall.health_risk),
+              recallDate: this.formatUSDADate(recall.recallDate || recall.recall_date || recall.date),
+              recallNumber: recall.recallNumber || recall.recall_number || 'N/A',
+              company: recall.recallingFirm || recall.recalling_firm || recall.company || 'Unknown',
+              distributionPattern: recall.distribution || recall.distribution_pattern || 'Unknown',
+              actionToTake: this.getActionFromSeverity(this.getSeverityFromUSDAClass(recall.classification || recall.healthRisk || recall.health_risk)),
+              details: recall.productDescription || recall.product_description || recall.code_info || '',
+              source: 'USDA',
+              officialLink: `https://www.fsis.usda.gov/recalls/${recall.recallNumber || recall.recall_number || ''}`
+            }));
 
-          console.log('✅ USDA recall feed processed and cached');
-          console.log('══════════════════════════════════════════════════════════');
+            // Cache the feed
+            await this.cacheUSDAFeed(transformedRecalls);
 
-          return recalls;
+            console.log('✅ USDA recall feed processed and cached');
+            console.log('══════════════════════════════════════════════════════════');
 
-        } catch (error) {
-          lastError = error;
-          if (error.name === 'AbortError') {
-            console.error(`⏱️  USDA API timeout on attempt ${attempt} (30 sec)`);
-          } else {
-            console.error(`❌ USDA fetch attempt ${attempt} failed:`, error.message);
-          }
+            return transformedRecalls;
 
-          // Wait before retry (exponential backoff: 2s, 4s)
-          if (attempt < 3) {
-            const delay = attempt * 2000;
-            console.log(`⏳ Waiting ${delay/1000}s before retry...`);
-            await this.delay(delay);
+          } catch (error) {
+            if (error.name === 'AbortError') {
+              console.error(`⏱️  USDA API timeout on attempt ${attempt} (30 sec)`);
+            } else {
+              console.error(`❌ USDA fetch attempt ${attempt} failed:`, error.message);
+            }
+
+            // Wait before retry (exponential backoff: 2s, 4s)
+            if (attempt < 3) {
+              const delay = attempt * 2000;
+              console.log(`⏳ Waiting ${delay/1000}s before retry...`);
+              await this.delay(delay);
+            }
           }
         }
+        
+        // If we get here, all 3 attempts for this URL failed, try next URL
+        console.log(`❌ All attempts failed for ${url}, trying next endpoint...`);
       }
 
-      // All 3 attempts failed
-      console.error('❌ All USDA fetch attempts failed');
+      // All URLs and attempts failed
+      console.error('❌ All USDA endpoints and attempts failed');
       console.log('══════════════════════════════════════════════════════════');
       
       // Return expired cache if available
@@ -117,25 +136,37 @@ class USDRecallService {
   }
 
   /**
-   * Fetch with timeout helper
+   * Fetch with timeout helper - IMPROVED VERSION
    */
   static async fetchWithTimeout(url, timeout) {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    return new Promise(async (resolve, reject) => {
+      // Set timeout
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Request timeout after ' + (timeout / 1000) + ' seconds'));
+      }, timeout);
 
-    try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'Accept': 'application/json'
-        }
-      });
-      clearTimeout(timeoutId);
-      return response;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      throw error;
-    }
+      try {
+        console.log(`⏱️  Starting fetch with ${timeout/1000}s timeout...`);
+        const startTime = Date.now();
+        
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+        console.log(`✓ Response received in ${elapsed}s`);
+        
+        clearTimeout(timeoutId);
+        resolve(response);
+      } catch (error) {
+        clearTimeout(timeoutId);
+        reject(error);
+      }
+    });
   }
 
   /**

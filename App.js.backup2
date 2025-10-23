@@ -142,7 +142,7 @@ export default function App() {
   }, []);
   */
 
-// ===== APP INITIALIZATION WITH REVENUECAT =====
+// ===== APP INITIALIZATION WITH REVENUECA T =====
 useEffect(() => {
     // Initialize RevenueCat first
     const initializeRevenueCat = async () => {
@@ -156,32 +156,7 @@ useEffect(() => {
 
     initializeRevenueCat();
 
-    // 🚀 PRE-LOAD RECALL FEED ON APP STARTUP
-    const preloadRecalls = async () => {
-  if (recallsPreloaded) {
-    console.log('⏭️  Recalls already pre-loaded, skipping...');
-    return;
-  }
-  
-  try {
-    setRecallsPreloaded(true); // Set flag immediately
-    console.log('');
-    console.log('🚀 ═══════════════════════════════════════════════════');
-    console.log('🚀 PRE-LOADING RECALL FEED ON APP STARTUP...');
-    console.log('🚀 ═══════════════════════════════════════════════════');
-    
-    await RecallService.fetchRecallFeed();
-    
-    console.log('✅ Recall feed ready for Alerts tab!');
-    console.log('🚀 ═══════════════════════════════════════════════════');
-    console.log('');
-  } catch (error) {
-    console.error('⚠️  Recall pre-load failed (non-critical):', error.message);
-    setRecallsPreloaded(false); // Reset on error so it can retry
-  }
-};
-
-    preloadRecalls();
+    initializeRevenueCat();
 
     // TEMPORARY: Clear product cache to see scoring logs
     const clearProductCache = async () => {
@@ -192,18 +167,30 @@ useEffect(() => {
           await AsyncStorage.multiRemove(productKeys);
           console.log('🗑️ CLEARED', productKeys.length, 'CACHED PRODUCTS');
         }
-
-        // 🔥 CLEAR ALTERNATIVES CACHE
-        const altKeys = keys.filter(k => k.startsWith('alternatives_'));
-        if (altKeys.length > 0) {
-          await AsyncStorage.multiRemove(altKeys);
-          console.log('🗑️ CLEARED', altKeys.length, 'CACHED ALTERNATIVES');
-        }
       } catch (error) {
-        console.log('Cache clear error:', error);
-      }
-    };
+  console.log('Cache clear error:', error);
+}
+
+// 🔥 CLEAR ALTERNATIVES CACHE
+try {
+  const altKeys = keys.filter(k => k.startsWith('alternatives_'));
+  if (altKeys.length > 0) {
+    await AsyncStorage.multiRemove(altKeys);
+    console.log('🗑️ CLEARED', altKeys.length, 'CACHED ALTERNATIVES');
+  }
+} catch (error) {
+  console.log('Alt cache clear error:', error);
+}
+    };  // ← MAKE SURE THIS CLOSING BRACE AND SEMICOLON ARE HERE!
     clearProductCache();
+
+    
+
+    Animated.timing(splashFadeAnim, {
+      toValue: 1,
+      duration: 500,
+      useNativeDriver: true,
+    }).start();
 
     Animated.timing(splashFadeAnim, {
       toValue: 1,
