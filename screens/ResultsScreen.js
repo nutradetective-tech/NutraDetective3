@@ -34,9 +34,9 @@ const ResultsScreen = ({
   styles,
   setShowUpgradeModal,
   setUpgradeReason,
-  handleBarcodeScan,  // ← NEW PROP
+  handleBarcodeScan,
 }) => {
-  // ===== NEW: Recall check state =====
+  // ===== Recall check state =====
   const [scannedRecall, setScannedRecall] = useState(null);
   const [checkingRecall, setCheckingRecall] = useState(false);
   
@@ -45,21 +45,13 @@ const ResultsScreen = ({
   const [adhdAdditives, setAdhdAdditives] = useState([]);
   const [isPremium, setIsPremium] = useState(false);
 
-  // ===== NEW: Advanced allergen state =====
+  // ===== Advanced allergen state =====
   const [allergenSummary, setAllergenSummary] = useState(null);
   const [userTier, setUserTier] = useState('FREE');
 
-  // ===== NEW: Healthy alternatives state =====
+  // ===== Healthy alternatives state =====
   const [alternatives, setAlternatives] = useState([]);
   const [loadingAlternatives, setLoadingAlternatives] = useState(false);
-
-  // Check for ADHD additives, allergens, and alternatives when product loads
-  useEffect(() => {
-    checkAdhdAdditives();
-    checkAllergens();
-    loadAlternatives();
-    checkForRecall();
-  }, [currentProduct]);
 
   const checkAdhdAdditives = async () => {
     try {
@@ -82,7 +74,7 @@ const ResultsScreen = ({
     }
   };
 
-  // ===== NEW: Check allergens using new system =====
+  // ===== Check allergens using new system =====
   const checkAllergens = async () => {
     try {
       // Get user's tier
@@ -107,12 +99,12 @@ const ResultsScreen = ({
     }
   };
 
-  // ===== NEW: Load healthy alternatives with COMPLETE ALLERGEN MAPPING =====
+  // ===== Load healthy alternatives with COMPLETE ALLERGEN MAPPING =====
   const loadAlternatives = async () => {
       try {
       setLoadingAlternatives(true);
       
-      // Get user's allergen profiles - FIXED: Use getAllProfiles()
+      // Get user's allergen profiles
       const allergenProfiles = await AllergenService.getAllProfiles();
       const defaultProfile = allergenProfiles.find(p => p.isDefault);
       
@@ -201,56 +193,7 @@ const ResultsScreen = ({
         'latex_kiwi': 'kiwi',
       };
       
-const handleShareRecall = async () => {
-    if (!scannedRecall) return;
-
-    const shareMessage = 
-      `🚨 FOOD RECALL ALERT\n\n` +
-      `I just scanned "${currentProduct.name}" and it's been RECALLED!\n\n` +
-      `Reason: ${scannedRecall.reason}\n` +
-      `Classification: ${scannedRecall.classification}\n` +
-      `Date: ${scannedRecall.recallDate}\n\n` +
-      `${scannedRecall.actionToTake}\n\n` +
-      `Check your food safety with NutraDetective 📱\n` +
-      `Download: https://nutradetective.com`;
-
-    try {
-      await Share.share({
-        message: shareMessage,
-        title: 'Food Recall Alert'
-      });
-    } catch (error) {
-      console.error('Error sharing recall:', error);
-    }
-  };
-
-      // ===== NEW: Check if scanned product is recalled =====
-  const checkForRecall = async () => {
-    try {
-      setCheckingRecall(true);
-      
-      // Quick check against cached recall feed (no API call!)
-      const recall = await RecallService.checkScannedProduct(
-        currentProduct.name,
-        currentProduct.brand
-      );
-      
-      if (recall) {
-        console.log('🚨 SCANNED PRODUCT IS RECALLED!');
-        setScannedRecall(recall);
-      } else {
-        console.log('✅ Scanned product not in recall database');
-        setScannedRecall(null);
-      }
-    } catch (error) {
-      console.error('Error checking recall:', error);
-      setScannedRecall(null);
-    } finally {
-      setCheckingRecall(false);
-    }
-  };
-      
-  // Convert to generic allergen list for filtering
+      // Convert to generic allergen list for filtering
       const userAllergens = rawAllergenIds.map(id => allergenMap[id] || id);
       
       // Remove duplicates
@@ -276,6 +219,65 @@ const handleShareRecall = async () => {
       setLoadingAlternatives(false);
     }
   };
+
+  // ===== UPDATED: Check if scanned product is recalled - NOW WITH BARCODE =====
+  const checkForRecall = async () => {
+    try {
+      setCheckingRecall(true);
+      
+      // 🔢 BARCODE-ONLY CHECK (Version 3.3)
+      // Pass barcode as 3rd parameter for exact matching
+      const recall = await RecallService.checkScannedProduct(
+        currentProduct.name,
+        currentProduct.brand,
+        currentProduct.barcode  // ← ADDED: Pass barcode for exact matching
+      );
+      
+      if (recall) {
+        console.log('🚨 SCANNED PRODUCT IS RECALLED! (Exact barcode match)');
+        setScannedRecall(recall);
+      } else {
+        console.log('✅ Scanned product not in recall database (barcode checked)');
+        setScannedRecall(null);
+      }
+    } catch (error) {
+      console.error('Error checking recall:', error);
+      setScannedRecall(null);
+    } finally {
+      setCheckingRecall(false);
+    }
+  };
+
+  const handleShareRecall = async () => {
+    if (!scannedRecall) return;
+
+    const shareMessage = 
+      `🚨 FOOD RECALL ALERT\n\n` +
+      `I just scanned "${currentProduct.name}" and it's been RECALLED!\n\n` +
+      `Reason: ${scannedRecall.reason}\n` +
+      `Classification: ${scannedRecall.classification}\n` +
+      `Date: ${scannedRecall.recallDate}\n\n` +
+      `${scannedRecall.actionToTake}\n\n` +
+      `Check your food safety with NutraDetective 📱\n` +
+      `Download: https://nutradetective.com`;
+
+    try {
+      await Share.share({
+        message: shareMessage,
+        title: 'Food Recall Alert'
+      });
+    } catch (error) {
+      console.error('Error sharing recall:', error);
+    }
+  };
+
+  // Check for ADHD additives, allergens, alternatives, and recalls when product loads
+  useEffect(() => {
+    checkAdhdAdditives();
+    checkAllergens();
+    loadAlternatives();
+    checkForRecall();
+  }, [currentProduct]);
 
   const handleUpgradeFromAdhdAlert = () => {
     setShowAdhdAlert(false);
@@ -395,46 +397,7 @@ const handleShareRecall = async () => {
               </View>
             </View>
 
-            {/* ===== NEW: Advanced Allergen Warning - RED URGENT STYLING ===== */}
-            {allergenSummary && allergenSummary.hasAllergens && (
-              <View style={additionalStyles.allergenAlertBox}>
-                <View style={additionalStyles.allergenHeader}>
-                  <Text style={additionalStyles.allergenIcon}>🚨</Text>
-                  <Text style={additionalStyles.allergenTitle}>
-                    ALLERGEN ALERT !!!
-                  </Text>
-                </View>
-
-                <Text style={additionalStyles.allergenDescription}>
-                  ⚠️ WARNING: This product contains allergens affecting {allergenSummary.affectedProfiles} family member(s).
-                </Text>
-
-                {/* Show warnings by profile */}
-                {allergenSummary.detailedResults.map((result, idx) => (
-                  <View key={idx} style={additionalStyles.profileAllergenSection}>
-                    <Text style={additionalStyles.profileName}>
-                      👤 {result.profile.name}
-                      {result.profile.isDefault && ' (You)'}
-                    </Text>
-                    {result.warnings.map((warning, wIdx) => (
-                      <View key={wIdx} style={additionalStyles.allergenItemRow}>
-                        <Text style={additionalStyles.severityIcon}>
-                          🔴
-                        </Text>
-                        <View style={{ flex: 1 }}>
-                          <Text style={additionalStyles.allergenItemTitle}>
-                            {warning.allergenName}
-                          </Text>
-                          <Text style={additionalStyles.allergenItemSource}>
-                            Found: {warning.matchedTerm}
-                          </Text>
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                ))}
-
-                {/* ===== 🚨 SCANNED PRODUCT RECALL ALERT ===== */}
+            {/* ===== 🚨 SCANNED PRODUCT RECALL ALERT ===== */}
             {scannedRecall && (
               <View style={additionalStyles.scannedRecallBanner}>
                 <View style={additionalStyles.scannedRecallHeader}>
@@ -493,6 +456,45 @@ const handleShareRecall = async () => {
                 </TouchableOpacity>
               </View>
             )}
+
+            {/* ===== Advanced Allergen Warning - RED URGENT STYLING ===== */}
+            {allergenSummary && allergenSummary.hasAllergens && (
+              <View style={additionalStyles.allergenAlertBox}>
+                <View style={additionalStyles.allergenHeader}>
+                  <Text style={additionalStyles.allergenIcon}>🚨</Text>
+                  <Text style={additionalStyles.allergenTitle}>
+                    ALLERGEN ALERT !!!
+                  </Text>
+                </View>
+
+                <Text style={additionalStyles.allergenDescription}>
+                  ⚠️ WARNING: This product contains allergens affecting {allergenSummary.affectedProfiles} family member(s).
+                </Text>
+
+                {/* Show warnings by profile */}
+                {allergenSummary.detailedResults.map((result, idx) => (
+                  <View key={idx} style={additionalStyles.profileAllergenSection}>
+                    <Text style={additionalStyles.profileName}>
+                      👤 {result.profile.name}
+                      {result.profile.isDefault && ' (You)'}
+                    </Text>
+                    {result.warnings.map((warning, wIdx) => (
+                      <View key={wIdx} style={additionalStyles.allergenItemRow}>
+                        <Text style={additionalStyles.severityIcon}>
+                          🔴
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                          <Text style={additionalStyles.allergenItemTitle}>
+                            {warning.allergenName}
+                          </Text>
+                          <Text style={additionalStyles.allergenItemSource}>
+                            Found: {warning.matchedTerm}
+                          </Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ))}
 
                 {/* Hidden allergens warning */}
                 {allergenSummary.hiddenAllergens.length > 0 && (
@@ -566,7 +568,7 @@ const handleShareRecall = async () => {
               </View>
             )}
 
-            {/* ===== NEW: Healthy Alternatives Section ===== */}
+            {/* ===== Healthy Alternatives Section ===== */}
             {alternatives.length > 0 && (
               <View style={additionalStyles.alternativesSection}>
                 <Text style={styles.sectionTitle}>✨ Healthier Alternatives</Text>
@@ -597,22 +599,22 @@ const handleShareRecall = async () => {
                     )}
                     
                     {alt.barcode && (
-  <TouchableOpacity
-    style={additionalStyles.scanButton}
-    onPress={() => {
-  console.log('🔄 Scanning alternative:', alt.barcode);
-  
-  // Close current results
-  setShowResult(false);
-  setCurrentProduct(null);
-  
-  // Trigger scan of alternative product
-  handleBarcodeScan(alt.barcode);
-}}
-  >
-    <Text style={additionalStyles.scanButtonText}>Scan This Instead</Text>
-  </TouchableOpacity>
-)}
+                      <TouchableOpacity
+                        style={additionalStyles.scanButton}
+                        onPress={() => {
+                          console.log('🔄 Scanning alternative:', alt.barcode);
+                          
+                          // Close current results
+                          setShowResult(false);
+                          setCurrentProduct(null);
+                          
+                          // Trigger scan of alternative product
+                          handleBarcodeScan(alt.barcode);
+                        }}
+                      >
+                        <Text style={additionalStyles.scanButtonText}>Scan This Instead</Text>
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ))}
               </View>
@@ -807,63 +809,64 @@ const handleShareRecall = async () => {
             )}
 
             {/* Save/Share buttons - unchanged */}
-            <View style={{ flexDirection: 'row', gap: 12, paddingVertical: 20, paddingHorizontal: 15 }}>
-              <TouchableOpacity
-                style={{ 
-                  flex: 1,
-                  backgroundColor: '#007BFF',
-                  paddingVertical: 14,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                }}
-                onPress={() => {
-                  Alert.alert('Success', 'Saved to history!');
-                }}
-              >
-                <Text style={{ color: 'white', fontSize: 16, fontWeight: '700' }}>Save</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={{ 
-                  flex: 1,
-                  paddingVertical: 14,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                  overflow: 'hidden',
-                }}
-                onPress={async () => {
-                  const shareMessage = `🔍 NutraDetective Scan Results\n\n` +
-                    `📦 ${currentProduct.name}\n` +
-                    `🏷️ ${currentProduct.brand}\n` +
-                    `📊 Grade: ${currentProduct.healthScore?.grade || '?'}\n` +
-                    `⭐ Score: ${currentProduct.healthScore?.score || 0}/100\n\n` +
-                    `${currentProduct.healthScore?.status || 'Unknown Status'}\n\n` +
-                    `Scanned with NutraDetective\n` +
-                    `Download: nutradetective.com`;
+<View style={{ flexDirection: 'row', gap: 12, paddingVertical: 20, paddingHorizontal: 15 }}>
+  <TouchableOpacity
+    style={{ 
+      flex: 1,
+      backgroundColor: '#007BFF',
+      paddingVertical: 14,
+      borderRadius: 12,
+      alignItems: 'center',
+    }}
+    onPress={() => {
+      Alert.alert('Success', 'Saved to history!');
+    }}
+  >
+    <Text style={{ color: 'white', fontSize: 16, fontWeight: '700' }}>Save</Text>
+  </TouchableOpacity>
+  
+  <TouchableOpacity
+    style={{ 
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 12,
+      alignItems: 'center',
+      overflow: 'hidden',
+    }}
+    onPress={async () => {
+      const shareMessage = `🔍 NutraDetective Scan Results\n\n` +
+        `📦 ${currentProduct.name}\n` +
+        `🏷️ ${currentProduct.brand}\n` +
+        `📊 Grade: ${currentProduct.healthScore?.grade || '?'}\n` +
+        `⭐ Score: ${currentProduct.healthScore?.score || 0}/100\n\n` +
+        `${currentProduct.healthScore?.status || 'Unknown Status'}\n\n` +
+        `Scanned with NutraDetective\n` +
+        `Download: nutradetective.com`;
 
-                  try {
-                    await Share.share({
-                      message: shareMessage,
-                      title: 'NutraDetective Scan Results'
-                    });
-                  } catch (error) {
-                    Alert.alert('Error', 'Could not share results');
-                  }
-                }}
-              >
-                <LinearGradient
-                  colors={['#E91E63', '#9C27B0']}
-                  style={{ 
-                    position: 'absolute',
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                  }}
-                />
-                <Text style={{ color: 'white', fontSize: 16, fontWeight: '700' }}>Share</Text>
-              </TouchableOpacity>
-            </View>
+      try {
+        await Share.share({
+          message: shareMessage,
+          title: 'NutraDetective Scan Results'
+        });
+      } catch (error) {
+        Alert.alert('Error', 'Could not share results');
+      }
+    }}
+  >
+    <LinearGradient
+      colors={['#E91E63', '#9C27B0']}
+      style={{ 
+        position: 'absolute',
+        left: 0,
+        right: 0,
+        top: 0,
+        bottom: 0,
+      }}
+    />
+    <Text style={{ color: 'white', fontSize: 16, fontWeight: '700' }}>Share</Text>
+  </TouchableOpacity>
+</View>
+
           </Animated.View>
         </ScrollView>
       </ResponsiveContainer>
@@ -1106,7 +1109,7 @@ const additionalStyles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ===== NEW: Healthy Alternatives Styles =====
+  // ===== Healthy Alternatives Styles =====
   alternativesSection: {
     backgroundColor: 'white',
     marginHorizontal: 15,
