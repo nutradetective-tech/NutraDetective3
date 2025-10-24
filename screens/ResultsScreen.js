@@ -53,6 +53,12 @@ const ResultsScreen = ({
   const [alternatives, setAlternatives] = useState([]);
   const [loadingAlternatives, setLoadingAlternatives] = useState(false);
 
+// ===== 🆕 FAMILY PROFILE SELECTION STATE =====
+  const [selectedProfileId, setSelectedProfileId] = useState(null); // null = show all profiles
+  const [selectedProfileResult, setSelectedProfileResult] = useState(null); // Result for selected profile
+  const [safeForEveryoneResult, setSafeForEveryoneResult] = useState(null); // Safe for all profiles check
+  const [allProfiles, setAllProfiles] = useState([]); // List of all family profiles
+
   const checkAdhdAdditives = async () => {
     try {
       // Check premium status
@@ -96,6 +102,60 @@ const ResultsScreen = ({
       }
     } catch (error) {
       console.error('Error checking allergens:', error);
+    }
+  };
+
+// ===== 🆕 LOAD ALL FAMILY PROFILES =====
+  const loadFamilyProfiles = async () => {
+    try {
+      const profiles = await AllergenService.getAllProfiles();
+      setAllProfiles(profiles);
+      console.log(`👥 Loaded ${profiles.length} family profile(s)`);
+    } catch (error) {
+      console.error('Error loading family profiles:', error);
+    }
+  };
+
+  // ===== 🆕 CHECK IF SAFE FOR EVERYONE =====
+  const checkSafeForEveryone = async () => {
+    try {
+      const status = await PremiumService.getStatus();
+      const result = await AllergenService.isSafeForEveryone(
+        currentProduct,
+        status.tier.toUpperCase()
+      );
+      setSafeForEveryoneResult(result);
+      
+      if (result.isSafe) {
+        console.log('✅ Product is SAFE FOR EVERYONE!');
+      } else {
+        console.log(`⚠️ Product has allergens for ${result.affectedProfiles.length} profile(s)`);
+      }
+    } catch (error) {
+      console.error('Error checking safe for everyone:', error);
+    }
+  };
+
+  // ===== 🆕 CHECK PRODUCT FOR SPECIFIC PROFILE =====
+  const checkSpecificProfile = async (profileId) => {
+    try {
+      const status = await PremiumService.getStatus();
+      const result = await AllergenService.checkProduct(
+        currentProduct,
+        profileId,
+        status.tier.toUpperCase()
+      );
+      
+      setSelectedProfileId(profileId);
+      setSelectedProfileResult(result);
+      
+      if (result.hasAllergens) {
+        console.log(`⚠️ Found ${result.warnings.length} allergen(s) for ${result.profile.name}`);
+      } else {
+        console.log(`✅ No allergens detected for ${result.profile.name}`);
+      }
+    } catch (error) {
+      console.error('Error checking specific profile:', error);
     }
   };
 
@@ -271,12 +331,22 @@ const ResultsScreen = ({
     }
   };
 
-  // Check for ADHD additives, allergens, alternatives, and recalls when product loads
+ // Check for ADHD additives, allergens, alternatives, recalls, and family profiles when product loads
   useEffect(() => {
     checkAdhdAdditives();
     checkAllergens();
     loadAlternatives();
     checkForRecall();
+    
+    // 🆕 Load family profiles for dropdown
+    loadFamilyProfiles();
+    
+    // 🆕 Check if safe for everyone
+    checkSafeForEveryone();
+    
+    // 🆕 Reset selected profile when new product scanned
+    setSelectedProfileId(null);
+    setSelectedProfileResult(null);
   }, [currentProduct]);
 
   const handleUpgradeFromAdhdAlert = () => {
@@ -457,8 +527,117 @@ const ResultsScreen = ({
               </View>
             )}
 
+{/* ===== 🆕 SAFE FOR EVERYONE BADGE ===== */}
+            {safeForEveryoneResult && safeForEveryoneResult.isSafe && (
+              <View style={additionalStyles.safeForEveryoneBanner}>
+                <View style={additionalStyles.safeHeader}>
+                  <Text style={additionalStyles.safeIcon}>✅</Text>
+                  <Text style={additionalStyles.safeTitle}>
+                    SAFE FOR EVERYONE
+                  </Text>
+                </View>
+                <Text style={additionalStyles.safeDescription}>
+                  This product contains no allergens for any of your {safeForEveryoneResult.totalProfiles} family profile(s).
+                </Text>
+              </View>
+            )}
+
+            {/* ===== 🆕 PROFILE SELECTOR DROPDOWN ===== */}
+            {allProfiles.length > 0 && (
+              <View style={additionalStyles.profileSelectorSection}>
+                <Text style={additionalStyles.selectorLabel}>
+                  Check allergens for:
+                </Text>
+                
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  {/* "All Profiles" button */}
+                  <TouchableOpacity
+                    style={[
+                      additionalStyles.profileChip,
+                      selectedProfileId === null && additionalStyles.profileChipActive
+                    ]}
+                    onPress={() => {
+                      setSelectedProfileId(null);
+                      setSelectedProfileResult(null);
+                    }}
+                  >
+                    <Text style={[
+                      additionalStyles.profileChipText,
+                      selectedProfileId === null && additionalStyles.profileChipTextActive
+                    ]}>
+                      👥 All Profiles
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  {/* Individual profile buttons */}
+                  {allProfiles.map((profile) => (
+                    <TouchableOpacity
+                      key={profile.id}
+                      style={[
+                        additionalStyles.profileChip,
+                        selectedProfileId === profile.id && additionalStyles.profileChipActive
+                      ]}
+                      onPress={() => checkSpecificProfile(profile.id)}
+                    >
+                      <Text style={[
+                        additionalStyles.profileChipText,
+                        selectedProfileId === profile.id && additionalStyles.profileChipTextActive
+                      ]}>
+                        {profile.isDefault ? '👤' : '👶'} {profile.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* ===== 🆕 SINGLE PROFILE VIEW (when profile selected) ===== */}
+            {selectedProfileId && selectedProfileResult && selectedProfileResult.hasAllergens && (
+              <View style={additionalStyles.allergenAlertBox}>
+                <View style={additionalStyles.allergenHeader}>
+                  <Text style={additionalStyles.allergenIcon}>🚨</Text>
+                  <Text style={additionalStyles.allergenTitle}>
+                    ALLERGEN ALERT for {selectedProfileResult.profile.name}
+                  </Text>
+                </View>
+
+                <Text style={additionalStyles.allergenDescription}>
+                  ⚠️ WARNING: This product contains {selectedProfileResult.warnings.length} allergen(s) for {selectedProfileResult.profile.name}.
+                </Text>
+
+                {selectedProfileResult.warnings.map((warning, idx) => (
+                  <View key={idx} style={additionalStyles.allergenItemRow}>
+                    <Text style={additionalStyles.severityIcon}>
+                      {warning.severity === 'SEVERE' ? '🔴' : warning.severity === 'MODERATE' ? '🟡' : '🟢'}
+                    </Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={additionalStyles.allergenItemTitle}>
+                        {warning.allergenName}
+                      </Text>
+                      <Text style={additionalStyles.allergenItemSource}>
+                        Found: {warning.matchedTerm}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {/* ===== 🆕 "NO ALLERGENS" MESSAGE (when profile selected but safe) ===== */}
+            {selectedProfileId && selectedProfileResult && !selectedProfileResult.hasAllergens && (
+              <View style={additionalStyles.safeForProfileBanner}>
+                <Text style={additionalStyles.safeIcon}>✅</Text>
+                <Text style={additionalStyles.safeTitle}>
+                  Safe for {selectedProfileResult.profile.name}
+                </Text>
+                <Text style={additionalStyles.safeDescription}>
+                  No allergens detected for this profile.
+                </Text>
+              </View>
+            )}
+
             {/* ===== Advanced Allergen Warning - RED URGENT STYLING ===== */}
-            {allergenSummary && allergenSummary.hasAllergens && (
+            {allergenSummary && allergenSummary.hasAllergens && !selectedProfileId && (
               <View style={additionalStyles.allergenAlertBox}>
                 <View style={additionalStyles.allergenHeader}>
                   <Text style={additionalStyles.allergenIcon}>🚨</Text>
@@ -885,6 +1064,87 @@ const ResultsScreen = ({
 
 // ===== STYLES WITH NEW ALTERNATIVES SECTION =====
 const additionalStyles = StyleSheet.create({
+
+// ===== 🆕 SAFE FOR EVERYONE BADGE STYLES =====
+  safeForEveryoneBanner: {
+    backgroundColor: '#D1FAE5',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 15,
+    marginVertical: 12,
+    borderWidth: 2,
+    borderColor: '#10B981',
+  },
+  safeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  safeIcon: {
+    fontSize: 28,
+    marginRight: 8,
+  },
+  safeTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#065F46',
+  },
+  safeDescription: {
+    fontSize: 14,
+    color: '#047857',
+    lineHeight: 20,
+  },
+
+  // ===== 🆕 PROFILE SELECTOR STYLES =====
+  profileSelectorSection: {
+    backgroundColor: '#F9FAFB',
+    paddingVertical: 12,
+    paddingHorizontal: 15,
+    marginHorizontal: 15,
+    marginVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+  },
+  selectorLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4B5563',
+    marginBottom: 8,
+  },
+  profileChip: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    marginRight: 8,
+    borderWidth: 2,
+    borderColor: '#E5E7EB',
+  },
+  profileChipActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#667EEA',
+  },
+  profileChipText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6B7280',
+  },
+  profileChipTextActive: {
+    color: '#667EEA',
+  },
+
+  // ===== 🆕 SAFE FOR SINGLE PROFILE STYLES =====
+  safeForProfileBanner: {
+    backgroundColor: '#DBEAFE',
+    borderRadius: 12,
+    padding: 16,
+    marginHorizontal: 15,
+    marginVertical: 12,
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+    alignItems: 'center',
+  },
 
   // ===== Scanned Product Recall Alert Styles =====
   scannedRecallBanner: {

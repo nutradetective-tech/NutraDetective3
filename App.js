@@ -53,6 +53,14 @@ import NameEditModal from './components/modals/NameEditModal';
 import GoalEditModal from './components/modals/GoalEditModal';
 import StatsSelectorModal from './components/modals/StatsSelectorModal';
 
+// ===== ONBOARDING IMPORTS =====
+import WelcomeScreen from './screens/onboarding/WelcomeScreen';
+import NameInputScreen from './screens/onboarding/NameInputScreen';
+import ModeSelectionScreen from './screens/onboarding/ModeSelectionScreen';
+import AccountLoginScreen from './screens/onboarding/AccountLoginScreen';
+import OnboardingService from './services/OnboardingService';
+import { ONBOARDING_STEPS } from './constants/onboarding';
+
 // ===== SUPABASE AUTH IMPORTS =====
 import { supabase } from './config/supabase';
 
@@ -60,6 +68,11 @@ export default function App() {
   // ===== AUTH STATE =====
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
+
+  // ===== ONBOARDING STATE =====
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [onboardingLoading, setOnboardingLoading] = useState(true);
+  const [currentOnboardingStep, setCurrentOnboardingStep] = useState(ONBOARDING_STEPS.WELCOME);
 
   // ===== EXISTING STATE =====
   const [testMode, setTestMode] = useState(false);
@@ -141,6 +154,50 @@ export default function App() {
     };
   }, []);
   */
+
+  // ===== CHECK ONBOARDING STATUS =====
+  useEffect(() => {
+    checkOnboardingStatus();
+  }, []);
+
+  const checkOnboardingStatus = async () => {
+    try {
+      console.log('🔍 Checking onboarding status...');
+      
+      const completed = await OnboardingService.hasCompletedOnboarding();
+      
+      if (completed) {
+        console.log('✅ Onboarding already completed');
+        setOnboardingCompleted(true);
+        
+        // Load onboarding state to get current step
+        const state = await OnboardingService.getOnboardingState();
+        setCurrentOnboardingStep(state.currentStep || ONBOARDING_STEPS.WELCOME);
+      } else {
+        console.log('⚠️ Onboarding not completed - will show onboarding flow');
+        setOnboardingCompleted(false);
+        setCurrentOnboardingStep(ONBOARDING_STEPS.WELCOME);
+      }
+    } catch (error) {
+      console.error('Error checking onboarding:', error);
+      // On error, assume onboarding not completed
+      setOnboardingCompleted(false);
+    } finally {
+      setOnboardingLoading(false);
+    }
+  };
+
+  const handleOnboardingComplete = async () => {
+    console.log('🎉 Onboarding completed!');
+    setOnboardingCompleted(true);
+    
+    // Reload user settings to get the name and mode from onboarding
+    const settings = await UserSettingsService.getSettings();
+    setUserSettings(settings);
+    setTempName(settings.userName);
+    
+    console.log('✅ User settings loaded:', settings);
+  };
 
 // ===== APP INITIALIZATION WITH REVENUECAT =====
 useEffect(() => {
@@ -245,7 +302,7 @@ useEffect(() => {
     Animated.loop(
       Animated.sequence([
         Animated.timing(pulseAnim, {
-          toValue: 1.1,
+          toValue: 1.05,
           duration: 1000,
           useNativeDriver: true,
         }),
@@ -261,18 +318,16 @@ useEffect(() => {
   const fadeIn = () => {
     Animated.timing(fadeAnim, {
       toValue: 1,
-      duration: 800,
+      duration: 500,
       useNativeDriver: true,
     }).start();
   };
 
   const loadHistory = async () => {
     try {
-      const historyData = await AsyncStorage.getItem('scanHistory');
-      if (historyData) {
-        const allHistory = JSON.parse(historyData);
-        const filteredHistory = await PremiumService.filterHistory(allHistory);
-        setScanHistory(filteredHistory);
+      const savedHistory = await AsyncStorage.getItem('scanHistory');
+      if (savedHistory) {
+        setScanHistory(JSON.parse(savedHistory));
       }
     } catch (error) {
       console.log('Error loading history:', error);
@@ -281,97 +336,53 @@ useEffect(() => {
 
   const saveToHistory = async (product) => {
     try {
-      const scanRecord = {
+      const newItem = {
         id: Date.now().toString(),
-        name: product.name,
-        brand: product.brand,
-        grade: product.healthScore?.grade || '?',
-        score: product.healthScore?.score || 0,
-        date: new Date().toISOString(),
-        barcode: product.barcode || '',
-        fullProduct: {
-          ...product,
-          cachedAt: new Date().toISOString(),
-          apiSource: product.source || 'Open Food Facts'
-        }
+        name: product.product_name,
+        brand: product.brands,
+        grade: product.nutriscore_grade || 'unknown',
+        score: product.calculatedScore || 0,
+        barcode: product.barcode,
+        image: product.image_url,
+        scannedAt: new Date().toISOString(),
+        fullProduct: product,
       };
 
-      const updatedHistory = [scanRecord, ...scanHistory].slice(0, 50);
+      const updatedHistory = [newItem, ...scanHistory].slice(0, APP_CONFIG.historyLimit);
       setScanHistory(updatedHistory);
-
       await AsyncStorage.setItem('scanHistory', JSON.stringify(updatedHistory));
     } catch (error) {
       console.log('Error saving to history:', error);
     }
   };
 
-  const handleBarcodeScan = async (result) => {
-    const barcode = result.data || result;
-
-    const scanCheck = await PremiumService.canScan();
-
-    if (!scanCheck.canScan) {
-      setIsScanning(false);
-      setScanMethod(null);
-      setShowCameraScanner(false);
-      setUpgradeReason('scans');
-      setShowUpgradeModal(true);
-      return;
-    }
-
+  const handleBarcodeScan = async (barcode) => {
     setIsScanning(false);
+    setIsLoading(true);
     setScanMethod(null);
-    setShowCameraScanner(false);
-    console.log('Starting product fetch');
 
-    setTimeout(async () => {
-      setIsLoading(true);
+    try {
+      console.log('📱 Barcode scanned:', barcode);
 
-      try {
-        if (!isPremium) {
-          const newCount = await PremiumService.incrementScanCounter();
-          setTodayScans(newCount);
-        }
+      const product = await ProductService.fetchProductByBarcode(barcode);
 
-        const product = await ProductService.fetchProductByBarcode(barcode);
-
-        if (product) {
-          if (userSettings.activeFilters && userSettings.activeFilters.length > 0) {
-            const allergenWarnings = ProductService.checkUserAllergens(product, userSettings.activeFilters);
-            if (allergenWarnings.length > 0) {
-              product.healthScore.warnings = [
-                ...allergenWarnings,
-                ...(product.healthScore.warnings || [])
-              ];
-            }
-          }
-
-          product.barcode = barcode;
-          setCurrentProduct(product);
-          setShowResult(true);
-          await saveToHistory(product);
-        } else {
-          Alert.alert(
-            'Product Not Found',
-            'This product is not in our database yet. Try another product.',
-            [
-              { text: 'Try Again', onPress: () => {
-                setScanMethod('manual');
-                setIsScanning(true);
-              }},
-              { text: 'Cancel', style: 'cancel' }
-            ]
-          );
-        }
-      } catch (error) {
-        Alert.alert('Error', 'Failed to fetch product data');
-      } finally {
-        setIsLoading(false);
+      if (product) {
+        product.barcode = barcode;
+        setCurrentProduct(product);
+        setShowResult(true);
+        await saveToHistory(product);
+      } else {
+        Alert.alert('Product Not Found', 'No information available for this product.');
       }
-    }, 100);
+    } catch (error) {
+      console.error('Scan error:', error);
+      Alert.alert('Error', 'Failed to fetch product information. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleHistoryItemPress = async (item) => {
+  const handleHistoryItemPress = (item) => {
     if (item.fullProduct) {
       console.log('✅ Using cached product data - no API call needed');
       setCurrentProduct(item.fullProduct);
@@ -438,6 +449,60 @@ useEffect(() => {
   // ===== SPLASH SCREEN =====
   if (showSplash) {
     return <SplashScreen splashFadeAnim={splashFadeAnim} styles={{}} />;
+  }
+
+  // ===== ONBOARDING LOADING SCREEN =====
+  if (onboardingLoading) {
+    return (
+      <View style={authStyles.loadingContainer}>
+        <ActivityIndicator size="large" color="#667EEA" />
+        <Text style={authStyles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
+
+  // ===== ONBOARDING FLOW =====
+  if (!onboardingCompleted) {
+    // Render appropriate onboarding screen based on current step
+    switch (currentOnboardingStep) {
+      case ONBOARDING_STEPS.WELCOME:
+        return (
+          <WelcomeScreen
+            onNext={() => setCurrentOnboardingStep(ONBOARDING_STEPS.NAME)}
+          />
+        );
+      
+      case ONBOARDING_STEPS.NAME:
+        return (
+          <NameInputScreen
+            onNext={() => setCurrentOnboardingStep(ONBOARDING_STEPS.MODE)}
+            onBack={() => setCurrentOnboardingStep(ONBOARDING_STEPS.WELCOME)}
+          />
+        );
+      
+      case ONBOARDING_STEPS.MODE:
+        return (
+          <ModeSelectionScreen
+            onNext={() => setCurrentOnboardingStep(ONBOARDING_STEPS.AUTH)}
+            onBack={() => setCurrentOnboardingStep(ONBOARDING_STEPS.NAME)}
+          />
+        );
+      
+      case ONBOARDING_STEPS.AUTH:
+        return (
+          <AccountLoginScreen
+            onComplete={handleOnboardingComplete}
+            onBack={() => setCurrentOnboardingStep(ONBOARDING_STEPS.MODE)}
+          />
+        );
+      
+      default:
+        return (
+          <WelcomeScreen
+            onNext={() => setCurrentOnboardingStep(ONBOARDING_STEPS.NAME)}
+          />
+        );
+    }
   }
 
   // ===== AUTH LOADING SCREEN =====

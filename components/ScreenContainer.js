@@ -10,7 +10,9 @@ const ScreenContainer = ({
   activeTab,
   setActiveTab,
   scrollable = true,
-  useScrollView = true  // HomeScreen & ProfileScreen use ScrollView, HistoryScreen uses FlatList
+  useScrollView = true,
+  scrollViewRef = null,
+  onScroll = null  // 🆕 NEW: Optional onScroll handler
 }) => {
   const ResponsiveContainer = ({ children, style }) => (
     <View style={[
@@ -26,15 +28,16 @@ const ScreenContainer = ({
     <SafeAreaView style={styles.container}>
       <ResponsiveContainer>
         {useScrollView ? (
-          // ScrollView path - Used by HomeScreen & ProfileScreen
           <ScrollView
+            ref={scrollViewRef}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 90 }}
+            onScroll={onScroll}  // 🆕 NEW: Track scroll position
+            scrollEventThrottle={16}  // 🆕 NEW: Smooth tracking
           >
             {children}
           </ScrollView>
         ) : (
-          // View path - Used by HistoryScreen with FlatList
           <View style={{ flex: 1, paddingBottom: 90 }}>
             {children}
           </View>

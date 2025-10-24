@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,9 @@ import {
   Image,
   ActivityIndicator,
   ScrollView,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import TierTestingTool from '../components/TierTestingTool';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,6 +22,7 @@ import NameEditModal from '../components/modals/NameEditModal';
 import GoalEditModal from '../components/modals/GoalEditModal';
 import StatsSelectorModal from '../components/modals/StatsSelectorModal';
 import AllergenPickerModal from '../components/modals/AllergenPickerModal';
+import AddFamilyMemberModal from '../components/modals/AddFamilyMemberModal';
 import UserSettingsService from '../services/UserSettingsService';
 import PremiumService from '../services/PremiumService';
 import SupabaseStorageService from '../services/SupabaseStorageService';
@@ -29,6 +33,11 @@ import { isTablet } from '../utils/responsive';
 import BottomNav from '../components/BottomNav';
 import ScreenContainer from '../components/ScreenContainer';
 import { supabase } from '../config/supabase';
+
+// Enable LayoutAnimation on Android
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 const ProfileScreen = ({
   user,
@@ -61,7 +70,15 @@ const ProfileScreen = ({
   const [showAllergenPicker, setShowAllergenPicker] = useState(false);
   const [currentPickerProfile, setCurrentPickerProfile] = useState(null);
   const [userTier, setUserTier] = useState('free');
-
+  
+  // Developer tools state
+  const [showDeveloperTools, setShowDeveloperTools] = useState(false);
+  
+  // 🆕 Add Family Member Modal state
+  const [showAddFamilyModal, setShowAddFamilyModal] = useState(false);
+  const scrollViewRef = useRef(null);
+  const scrollYRef = useRef(0);  
+  const isTogglingRef = useRef(false);
   // Load profile picture and allergen profiles on mount
   useEffect(() => {
     loadProfilePicture();
@@ -204,74 +221,164 @@ const ProfileScreen = ({
     );
   };
 
-  // Allergen profile management functions
-  const toggleProfileExpanded = (profileId) => {
-    const newExpanded = new Set(expandedProfiles);
-    if (newExpanded.has(profileId)) {
-      newExpanded.delete(profileId);
-    } else {
-      newExpanded.add(profileId);
-    }
-    setExpandedProfiles(newExpanded);
-  };
-
-  const addFamilyMember = async () => {
-    try {
-      // Check tier limits
-      const canAdd = await AllergenService.canAddProfile(userTier);
-      if (!canAdd.allowed) {
-        Alert.alert(
-          canAdd.reason === 'tier_limit' ? '⭐ Upgrade Required' : '👑 Pro Required',
-          canAdd.message,
-          [
-            { text: 'Maybe Later', style: 'cancel' },
-            { text: 'Upgrade', onPress: () => {
-              // TODO: Open upgrade modal
-              console.log('Open upgrade modal');
-            }}
-          ]
-        );
-        return;
-      }
-
-      // Prompt for name
-      Alert.prompt(
-        'Add Family Member',
-        'Enter the name of the family member:',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Add',
-            onPress: async (name) => {
-              if (!name || !name.trim()) {
-                Alert.alert('Error', 'Please enter a name.');
-                return;
-              }
-
-              try {
-                await AllergenService.createProfile(name.trim(), []);
-                await loadAllergenProfiles();
-                Alert.alert(
-                  '✅ Added!',
-                  `${name} has been added to your family profiles.`,
-                  [{ text: 'Great!' }]
-                );
-              } catch (error) {
-                console.error('Error creating profile:', error);
-                Alert.alert('Error', 'Could not create profile. Please try again.');
-              }
+  
+  const handleResetOnboarding = () => {
+    Alert.alert(
+      '🔄 Reset Onboarding?',
+      'This will clear all onboarding data and you will see the onboarding flow again when you restart the app.\n\nThis action is for testing purposes only.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset Now',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔄 Resetting onboarding data...');
+              
+              await AsyncStorage.multiRemove([
+                'onboarding_state',
+                'onboarding_completed',
+                'user_mode',
+                'is_guest',
+                'guest_user_id',
+              ]);
+              
+              console.log('✅ Onboarding data cleared successfully');
+              
+              Alert.alert(
+                '✅ Onboarding Reset Complete!',
+                'Please close and reopen the app to see the onboarding flow again.',
+                [{ text: 'Got It!' }]
+              );
+            } catch (error) {
+              console.error('❌ Error resetting onboarding:', error);
+              Alert.alert(
+                'Error',
+                'Failed to reset onboarding. Please try again.\n\nError: ' + error.message,
+                [{ text: 'OK' }]
+              );
             }
           }
-        ],
-        'plain-text'
-      );
+        }
+      ]
+    );
+  };
+
+  // Allergen profile management functions
+ const toggleProfileExpanded = useCallback((profileId) => {
+  // Mark that we're toggling (to restore position)
+  isTogglingRef.current = true;
+  
+  // Store current scroll position
+  const currentScrollY = scrollYRef.current;
+
+  console.log('🔵 Toggling profile, current scrollY:', currentScrollY);
+  
+  // Update state
+  const newExpanded = new Set(expandedProfiles);
+  if (newExpanded.has(profileId)) {
+    newExpanded.delete(profileId);
+  } else {
+    newExpanded.add(profileId);
+  }
+  setExpandedProfiles(newExpanded);
+  
+  // Restore scroll position after render
+  setTimeout(() => {
+    if (scrollViewRef.current && isTogglingRef.current) {
+      scrollViewRef.current.scrollTo({ 
+        y: currentScrollY, 
+        animated: false 
+      });
+      isTogglingRef.current = false;
+    }
+  }, 10);
+}, [expandedProfiles]);
+
+  // 🆕 UPDATED: Add Family Member (works on iOS + Android)
+  const addFamilyMember = async () => {
+    try {
+      console.log('🔵 Step 1: Starting addFamilyMember');
+      
+      // Check tier limits
+      const canAdd = await AllergenService.canAddProfile(userTier);
+      
+      console.log('🔵 Step 2: canAdd result:', canAdd);
+      console.log('🔵 Step 3: canAdd.allowed =', canAdd.allowed);
+      
+      if (!canAdd.allowed) {
+  console.log('🔴 Step 4: Tier limit reached, showing upgrade modal');
+  
+  // Different buttons and messages based on tier
+  let buttons = [];
+  let title = '📊 Profile Limit Reached';
+  
+  if (userTier.toUpperCase() === 'PRO') {
+    // PRO users: Just show OK (they're at max limit)
+    buttons = [{ text: 'OK', style: 'default' }];
+  } else if (userTier.toUpperCase() === 'PLUS') {
+    // PLUS users: Offer upgrade to PRO
+    title = '⭐ Upgrade to Pro?';
+    buttons = [
+      { text: 'Maybe Later', style: 'cancel' },
+      { 
+        text: 'Upgrade to Pro', 
+        onPress: () => {
+          // TODO: Open upgrade modal for PRO
+          console.log('Open PRO upgrade modal');
+          Alert.alert('Coming Soon', 'Pro upgrade coming soon!');
+        }
+      }
+    ];
+  } else {
+    // FREE users: Offer upgrade to PLUS
+    title = '⭐ Upgrade to Plus?';
+    buttons = [
+      { text: 'Maybe Later', style: 'cancel' },
+      { 
+        text: 'Upgrade to Plus', 
+        onPress: () => {
+          // TODO: Open upgrade modal for PLUS
+          console.log('Open PLUS upgrade modal');
+          Alert.alert('Coming Soon', 'Plus upgrade coming soon!');
+        }
+      }
+    ];
+  }
+  
+  Alert.alert(title, canAdd.message, buttons);
+  return;
+}
+      
+      console.log('✅ Step 5: Tier check passed, showing modal');
+
+      // Show modal (works on both iOS and Android)
+      setShowAddFamilyModal(true);
     } catch (error) {
       console.error('Error in addFamilyMember:', error);
       Alert.alert('Error', 'Could not add family member.');
     }
   };
 
-  const deleteProfile = (profileId, profileName) => {
+  // 🆕 Handler for when user submits name from modal
+  const handleAddFamilyMemberSubmit = async (name) => {
+    setShowAddFamilyModal(false);
+    
+    try {
+      await AllergenService.createProfile(name.trim(), []);
+      await loadAllergenProfiles();
+      Alert.alert(
+        '✅ Added!',
+        `${name} has been added to your family profiles.`,
+        [{ text: 'Great!' }]
+      );
+    } catch (error) {
+      console.error('Error creating profile:', error);
+      Alert.alert('Error', 'Could not create profile. Please try again.');
+    }
+  };
+
+  const deleteProfile = useCallback((profileId, profileName) => {
     if (profileId === 'user') {
       Alert.alert('Cannot Delete', 'You cannot delete your own profile.');
       return;
@@ -298,12 +405,12 @@ const ProfileScreen = ({
         }
       ]
     );
-  };
+}, []);
 
-  const openAllergenPicker = (profile) => {
-    setCurrentPickerProfile(profile);
-    setShowAllergenPicker(true);
-  };
+ const openAllergenPicker = useCallback((profile) => {
+  setCurrentPickerProfile(profile);
+  setShowAllergenPicker(true);
+}, []);
 
   const handleSelectAllergen = async (allergen) => {
     if (!currentPickerProfile) return;
@@ -324,7 +431,8 @@ const ProfileScreen = ({
     }
   };
 
-  const removeAllergen = (profileId, allergenId, profileName, allergenName) => {
+  const removeAllergen = useCallback((profileId, allergenId, profileName, allergenName) => {
+ 
     Alert.alert(
       'Remove Allergen?',
       `Remove ${allergenName} from ${profileName}'s allergens?`,
@@ -346,7 +454,7 @@ const ProfileScreen = ({
         }
       ]
     );
-  };
+  }, []);
 
   const getSeverityIcon = (severity) => {
     switch (severity) {
@@ -368,7 +476,14 @@ const ProfileScreen = ({
   );
 
   return (
-    <ScreenContainer activeTab="profile" setActiveTab={setActiveTab}>
+  <ScreenContainer 
+    activeTab="profile" 
+    setActiveTab={setActiveTab}
+    scrollViewRef={scrollViewRef}
+    onScroll={(event) => {
+      scrollYRef.current = event.nativeEvent.contentOffset.y;
+    }}
+  >
       <StatusBar barStyle="light-content" />
 
       <LinearGradient
@@ -453,7 +568,7 @@ const ProfileScreen = ({
           )}
         </View>
 
-<TierTestingTool />
+        <TierTestingTool />
 
         {loadingProfiles ? (
           <View style={allergenStyles.loadingContainer}>
@@ -619,6 +734,57 @@ const ProfileScreen = ({
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
 
+      {/* Developer Tools Section */}
+      <View style={devStyles.container}>
+        <TouchableOpacity
+          style={devStyles.header}
+          onPress={() => setShowDeveloperTools(!showDeveloperTools)}
+          activeOpacity={0.7}
+        >
+          <View style={devStyles.headerLeft}>
+            <Text style={devStyles.headerIcon}>🛠️</Text>
+            <Text style={devStyles.headerTitle}>Developer Tools</Text>
+          </View>
+          <Text style={devStyles.expandIcon}>
+            {showDeveloperTools ? '▼' : '▶'}
+          </Text>
+        </TouchableOpacity>
+
+        {showDeveloperTools && (
+          <View style={devStyles.content}>
+            <Text style={devStyles.description}>
+              Testing tools for development and debugging
+            </Text>
+
+            <TouchableOpacity
+              style={devStyles.resetButton}
+              onPress={handleResetOnboarding}
+              activeOpacity={0.8}
+            >
+              <LinearGradient
+                colors={['#F97316', '#EA580C']}
+                style={devStyles.resetButtonGradient}
+              >
+                <Text style={devStyles.resetButtonIcon}>🔄</Text>
+                <View style={devStyles.resetButtonTextContainer}>
+                  <Text style={devStyles.resetButtonTitle}>Reset Onboarding</Text>
+                  <Text style={devStyles.resetButtonSubtitle}>
+                    Clear all onboarding data to test the flow
+                  </Text>
+                </View>
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={devStyles.infoBox}>
+              <Text style={devStyles.infoIcon}>ℹ️</Text>
+              <Text style={devStyles.infoText}>
+                After resetting, close and reopen the app to see the onboarding screens
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+
       {/* Modals */}
       <NameEditModal
         visible={showNameEditModal}
@@ -659,6 +825,13 @@ const ProfileScreen = ({
         onSelectAllergen={handleSelectAllergen}
         selectedAllergens={currentPickerProfile?.allergens || []}
         profileName={currentPickerProfile?.name || ''}
+      />
+      
+      {/* 🆕 Add Family Member Modal */}
+      <AddFamilyMemberModal
+        visible={showAddFamilyModal}
+        onClose={() => setShowAddFamilyModal(false)}
+        onAdd={handleAddFamilyMemberSubmit}
       />
     </ScreenContainer>
   );
@@ -814,6 +987,102 @@ const allergenStyles = StyleSheet.create({
     color: '#92400E',
     textAlign: 'center',
     fontWeight: '500',
+  },
+});
+
+// Developer Tools styles
+const devStyles = StyleSheet.create({
+  container: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 24,
+    backgroundColor: '#FFF7ED',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#FDBA74',
+    overflow: 'hidden',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#FFF7ED',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerIcon: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#9A3412',
+  },
+  expandIcon: {
+    fontSize: 14,
+    color: '#EA580C',
+  },
+  content: {
+    padding: 16,
+    paddingTop: 0,
+    borderTopWidth: 1,
+    borderTopColor: '#FED7AA',
+  },
+  description: {
+    fontSize: 13,
+    color: '#9A3412',
+    marginBottom: 16,
+    lineHeight: 18,
+  },
+  resetButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  resetButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+  },
+  resetButtonIcon: {
+    fontSize: 28,
+    marginRight: 12,
+  },
+  resetButtonTextContainer: {
+    flex: 1,
+  },
+  resetButtonTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  resetButtonSubtitle: {
+    fontSize: 12,
+    color: '#FFFFFF',
+    opacity: 0.9,
+  },
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFBEB',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  infoIcon: {
+    fontSize: 16,
+    marginRight: 8,
+  },
+  infoText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#78350F',
+    lineHeight: 16,
   },
 });
 

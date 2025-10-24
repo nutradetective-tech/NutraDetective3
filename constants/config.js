@@ -1,3 +1,6 @@
+// constants/config.js
+// App-wide configuration constants
+
 export const DEFAULT_SETTINGS = {
   userName: 'User',
   profileInitials: 'U',
@@ -6,6 +9,9 @@ export const DEFAULT_SETTINGS = {
   dashboardStats: ['totalScans', 'healthyPercent', 'streak'],
   theme: 'light',
   notifications: true,
+  // NEW: Onboarding-related settings
+  userMode: 'game', // 'game' or 'educational'
+  isGuest: false,
 };
 
 export const TEST_BARCODES = {
@@ -30,4 +36,31 @@ export const APP_CONFIG = {
   maxGoal: 50,
   borderRadius: 24,
   bottomNavHeight: 70,
+  // NEW: Onboarding configuration
+  showOnboarding: true, // Set to false to skip onboarding for testing
+  onboardingVersion: 1, // Increment to force re-onboarding
+};
+
+// NEW: Guest user limitations
+export const GUEST_CONFIG = {
+  maxScansPerDay: 5,
+  enableCloudBackup: false,
+  enableLeaderboards: false,
+  enableFamilyAccounts: false,
+  showUpgradePromptsAfterDays: 7,
+};
+
+// NEW: User modes
+export const USER_MODES = {
+  GAME: 'game',
+  EDUCATIONAL: 'educational',
+};
+
+export default {
+  DEFAULT_SETTINGS,
+  TEST_BARCODES,
+  API_CONFIG,
+  APP_CONFIG,
+  GUEST_CONFIG,
+  USER_MODES,
 };

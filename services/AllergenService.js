@@ -183,18 +183,73 @@ class AllergenService {
   /**
    * Check tier limits for profiles
    * FREE: 1 profile
-   * PLUS: 3 profiles
+   * PLUS: 3 profiles  
    * PRO: Unlimited
    */
   static async canAddProfile(userTier) {
     const profiles = await this.getAllProfiles();
     const count = profiles.length;
     
-    if (userTier === 'PRO') return true;
-    if (userTier === 'PLUS') return count < 3;
-    if (userTier === 'FREE') return count < 1;
+    // Convert to uppercase for consistent checking
+    const tier = userTier.toUpperCase();
     
-    return false;
+    console.log('🔍 canAddProfile check - tier:', tier, 'current profiles:', count);
+    
+    // Check tier limits
+    if (tier === 'PRO') {
+  if (count < 6) {  // User + 5 family members = 6 total
+    return { 
+      allowed: true, 
+      reason: 'within_limit', 
+      message: `${count + 1} of 6 profiles` 
+    };
+  } else {
+    return { 
+      allowed: false, 
+      reason: 'tier_limit', 
+      message: 'Pro members can have up to 5 family profiles. You already have the maximum number of profiles.' 
+    };
+  }
+}
+    
+    if (tier === 'PLUS') {
+      if (count < 4) {
+        return { 
+          allowed: true, 
+          reason: 'within_limit', 
+          message: `${count + 1} of 4 profiles` 
+        };
+      } else {
+        return { 
+          allowed: false, 
+          reason: 'tier_limit', 
+          message: 'Plus members can have up to 3 family profiles. Upgrade to Pro for unlimited profiles.' 
+        };
+      }
+    }
+    
+    if (tier === 'FREE') {
+      if (count < 1) {
+        return { 
+          allowed: true, 
+          reason: 'within_limit', 
+          message: 'Your profile' 
+        };
+      } else {
+        return { 
+          allowed: false, 
+          reason: 'tier_limit', 
+          message: 'Free users can only have 1 profile. Upgrade to Plus for 3 family profiles, or Pro for unlimited.' 
+        };
+      }
+    }
+    
+    // Fallback
+    return { 
+      allowed: false, 
+      reason: 'unknown_tier', 
+      message: 'Unable to verify tier status' 
+    };
   }
   
   // ==========================================
@@ -429,6 +484,166 @@ class AllergenService {
     };
   }
   
+/**
+   * Check product against ONE specific profile
+   * EFFICIENT: Reuses detection logic but filters to single profile
+   * 
+   * @param {Object} product - Product data from Open Food Facts
+   * @param {String} profileId - ID of profile to check ('user', 'profile_123', etc.)
+   * @param {String} userTier - User's premium tier ('FREE', 'PLUS', 'PRO')
+   * @returns {Object} - { profile, warnings, hasAllergens }
+   */
+  static async checkProduct(product, profileId, userTier = 'FREE') {
+    console.log('');
+    console.log('🔍 CHECK SINGLE PROFILE');
+    console.log('═══════════════════════════════════════════');
+    console.log('📦 Product:', product.name || 'Unknown');
+    console.log('👤 Profile ID:', profileId);
+    console.log('🎫 User tier:', userTier);
+    
+    // Get the specific profile
+    const profile = await this.getProfile(profileId);
+    
+    if (!profile) {
+      console.log('❌ Profile not found:', profileId);
+      return {
+        profile: null,
+        warnings: [],
+        hasAllergens: false,
+        error: 'Profile not found'
+      };
+    }
+    
+    console.log('✅ Checking profile:', profile.name);
+    console.log('📋 Profile has', profile.allergens.length, 'allergens');
+    
+    // Get ingredients text (lowercase for matching)
+    const ingredientsText = (product.ingredients_text || product.ingredients || '').toLowerCase();
+    const productAllergenTags = product.allergens_tags || [];
+    
+    const warnings = [];
+    
+    // Check each allergen in this profile
+    for (const allergenId of profile.allergens) {
+      // Check tier access
+      if (!canAccessAllergen(allergenId, userTier)) {
+        continue;
+      }
+      
+      const allergen = getAllergen(allergenId);
+      if (!allergen) continue;
+      
+      // EFFICIENT DETECTION: Check all methods in order of speed
+      let found = false;
+      let matchedBy = '';
+      let matchedTerm = '';
+      
+      // Method 1: Product allergen tags (fastest - already parsed)
+      for (const tag of productAllergenTags) {
+        const cleanTag = tag.replace('en:', '').toLowerCase();
+        if (allergen.keywords.some(k => cleanTag.includes(k.toLowerCase()))) {
+          found = true;
+          matchedBy = 'product allergen tags';
+          matchedTerm = tag;
+          break;
+        }
+      }
+      
+      // Method 2: Ingredients keywords (if not found yet)
+      if (!found) {
+        for (const keyword of allergen.keywords) {
+          if (ingredientsText.includes(keyword.toLowerCase())) {
+            found = true;
+            matchedBy = 'ingredients keywords';
+            matchedTerm = keyword;
+            break;
+          }
+        }
+      }
+      
+      // Method 3: Derivatives (slowest - only if still not found)
+      if (!found) {
+        for (const derivative of allergen.derivatives) {
+          if (ingredientsText.includes(derivative.toLowerCase())) {
+            found = true;
+            matchedBy = 'hidden source/derivative';
+            matchedTerm = derivative;
+            break;
+          }
+        }
+      }
+      
+      // Add warning if allergen detected
+      if (found) {
+        warnings.push({
+          allergenId: allergenId,
+          allergenName: allergen.name,
+          severity: allergen.severity,
+          severityInfo: SEVERITY_LEVELS[allergen.severity],
+          matchedBy: matchedBy,
+          matchedTerm: matchedTerm,
+          description: allergen.description,
+          category: allergen.category
+        });
+      }
+    }
+    
+    // Sort warnings by severity (most severe first)
+    warnings.sort((a, b) => {
+      const severityOrder = { SEVERE: 0, MODERATE: 1, MILD: 2 };
+      return severityOrder[a.severity] - severityOrder[b.severity];
+    });
+    
+    console.log('📊 Result:', warnings.length, 'allergen(s) detected');
+    console.log('═══════════════════════════════════════════');
+    console.log('');
+    
+    return {
+      profile: profile,
+      warnings: warnings,
+      hasAllergens: warnings.length > 0
+    };
+  }
+  
+  /**
+   * Check if product is safe for ALL family profiles
+   * EFFICIENT: Single detection pass, checks all profiles at once
+   * 
+   * @param {Object} product - Product data from Open Food Facts
+   * @param {String} userTier - User's premium tier ('FREE', 'PLUS', 'PRO')
+   * @returns {Object} - { isSafe, affectedProfiles, safeProfiles }
+   */
+  static async isSafeForEveryone(product, userTier = 'FREE') {
+    console.log('');
+    console.log('🛡️  CHECK SAFE FOR EVERYONE');
+    console.log('═══════════════════════════════════════════');
+    
+    // EFFICIENT: Use existing detectAllergens (checks all profiles in one pass)
+    const detectionResults = await this.detectAllergens(product, userTier);
+    
+    const profiles = await this.getAllProfiles();
+    const affectedProfiles = detectionResults.map(r => r.profile);
+    const safeProfiles = profiles.filter(p => 
+      !affectedProfiles.some(ap => ap.id === p.id)
+    );
+    
+    const isSafe = detectionResults.length === 0;
+    
+    console.log('📊 RESULTS:');
+    console.log('✅ Safe for:', safeProfiles.length, 'profile(s)');
+    console.log('⚠️  Warnings for:', affectedProfiles.length, 'profile(s)');
+    console.log('🛡️  Overall:', isSafe ? 'SAFE FOR EVERYONE' : 'CONTAINS ALLERGENS');
+    console.log('═══════════════════════════════════════════');
+    console.log('');
+    
+    return {
+      isSafe: isSafe,
+      affectedProfiles: affectedProfiles,
+      safeProfiles: safeProfiles,
+      totalProfiles: profiles.length
+    };
+  }
+
   // ==========================================
   // MIGRATION FROM OLD SYSTEM
   // ==========================================
