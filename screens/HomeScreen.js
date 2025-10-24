@@ -8,6 +8,9 @@ import {
   StatusBar,
   Image,
 } from 'react-native';
+import XPBar from '../components/XPBar';
+import StreakWidget from '../components/StreakWidget';
+import GamificationService from '../services/GamificationService';
 import { LinearGradient } from 'expo-linear-gradient';
 import CameraScanner from '../components/CameraScanner';
 import SimpleScanner from '../components/SimpleScanner';
@@ -40,11 +43,25 @@ const HomeScreen = ({
   const [currentTier, setCurrentTier] = useState('free');
   const [scansRemaining, setScansRemaining] = useState(7);
   const [scanLimit, setScanLimit] = useState(7);
+  
+  // Gamification state
+  const [gamificationData, setGamificationData] = useState(null);
 
-  // Load tier status on mount
+  // Load tier status and gamification on mount
   useEffect(() => {
     loadTierStatus();
+    loadGamificationData();
   }, []);
+
+  // Load gamification data
+  const loadGamificationData = async () => {
+    try {
+      const summary = await GamificationService.getSummary();
+      setGamificationData(summary);
+    } catch (error) {
+      console.error('Error loading gamification:', error);
+    }
+  };
 
   // Function to load tier status
   const loadTierStatus = async () => {
@@ -137,6 +154,24 @@ const HomeScreen = ({
             <Text style={styles.profileCircleText}>{userSettings.profileInitials}</Text>
           </LinearGradient>
         </View>
+
+        {/* 🎮 GAMIFICATION UI */}
+        {gamificationData && (
+          <>
+            <XPBar
+              xp={gamificationData.xp}
+              level={gamificationData.level}
+              xpForNextLevel={gamificationData.xpForNextLevel}
+              levelProgress={gamificationData.levelProgress}
+              totalScans={gamificationData.totalScans}
+            />
+            
+            <StreakWidget
+              streakDays={gamificationData.streakDays}
+              longestStreak={gamificationData.longestStreak}
+            />
+          </>
+        )}
 
         <View style={[
           styles.statsGrid,

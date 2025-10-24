@@ -39,6 +39,117 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// 🆕 MEMOIZED PROFILE CARD COMPONENT - Prevents unnecessary re-renders (fixes flicker)
+const ProfileCard = React.memo(({ 
+  profile, 
+  isExpanded, 
+  onToggle, 
+  onDelete, 
+  onAddAllergen, 
+  onRemoveAllergen,
+  getSeverityIcon 
+}) => {
+  const allergenCount = profile.allergens.length;
+
+  return (
+    <View style={allergenStyles.profileCard}>
+      {/* Profile Header */}
+      <TouchableOpacity
+        style={allergenStyles.profileHeader}
+        onPress={() => onToggle(profile.id)}
+        activeOpacity={0.7}
+      >
+        <View style={allergenStyles.profileHeaderLeft}>
+          <Text style={allergenStyles.profileIcon}>
+            {profile.id === 'user' ? '👤' : '👨‍👩‍👧'}
+          </Text>
+          <View>
+            <Text style={allergenStyles.profileName}>{profile.name}</Text>
+            <Text style={allergenStyles.profileSubtext}>
+              {allergenCount} allergen{allergenCount !== 1 ? 's' : ''}
+            </Text>
+          </View>
+        </View>
+        <Text style={allergenStyles.expandIcon}>
+          {isExpanded ? '▼' : '▶'}
+        </Text>
+      </TouchableOpacity>
+
+      {/* Expanded Content */}
+      {isExpanded && (
+        <View style={allergenStyles.profileContent}>
+          {allergenCount === 0 ? (
+            <View style={allergenStyles.emptyState}>
+              <Text style={allergenStyles.emptyText}>
+                No allergens added yet
+              </Text>
+            </View>
+          ) : (
+            <View style={allergenStyles.allergensContainer}>
+              {profile.allergens.map((allergenId) => {
+                const allergen = ALLERGEN_DATABASE[allergenId];
+                if (!allergen) return null;
+
+                return (
+                  <View key={allergenId} style={allergenStyles.allergenChip}>
+                    <Text style={allergenStyles.allergenChipIcon}>
+                      {getSeverityIcon(allergen.severity)}
+                    </Text>
+                    <Text style={allergenStyles.allergenChipText}>
+                      {allergen.name}
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() => onRemoveAllergen(
+                        profile.id,
+                        allergenId,
+                        profile.name,
+                        allergen.name
+                      )}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text style={allergenStyles.allergenChipRemove}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+
+          {/* Action Buttons */}
+          <View style={allergenStyles.profileActions}>
+            <TouchableOpacity
+              style={allergenStyles.actionButton}
+              onPress={() => onAddAllergen(profile)}
+            >
+              <Text style={allergenStyles.actionButtonText}>
+                + Add Allergen
+              </Text>
+            </TouchableOpacity>
+
+            {profile.id !== 'user' && (
+              <TouchableOpacity
+                style={allergenStyles.deleteButton}
+                onPress={() => onDelete(profile.id, profile.name)}
+              >
+                <Text style={allergenStyles.deleteButtonText}>🗑️</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+    </View>
+  );
+}, (prevProps, nextProps) => {
+  // 🆕 Custom comparison - only re-render if these specific props change
+  return (
+    prevProps.profile.id === nextProps.profile.id &&
+    prevProps.profile.name === nextProps.profile.name &&
+    prevProps.profile.allergens.length === nextProps.profile.allergens.length &&
+    prevProps.isExpanded === nextProps.isExpanded &&
+    JSON.stringify(prevProps.profile.allergens) === JSON.stringify(nextProps.profile.allergens)
+  );
+});
+
 const ProfileScreen = ({
   user,
   userSettings,
@@ -74,11 +185,14 @@ const ProfileScreen = ({
   // Developer tools state
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
   
-  // 🆕 Add Family Member Modal state
+  // Add Family Member Modal state
   const [showAddFamilyModal, setShowAddFamilyModal] = useState(false);
+  
+  // Scroll position tracking (fixes scroll jump)
   const scrollViewRef = useRef(null);
   const scrollYRef = useRef(0);  
   const isTogglingRef = useRef(false);
+
   // Load profile picture and allergen profiles on mount
   useEffect(() => {
     loadProfilePicture();
@@ -221,7 +335,6 @@ const ProfileScreen = ({
     );
   };
 
-  
   const handleResetOnboarding = () => {
     Alert.alert(
       '🔄 Reset Onboarding?',
@@ -265,37 +378,35 @@ const ProfileScreen = ({
   };
 
   // Allergen profile management functions
- const toggleProfileExpanded = useCallback((profileId) => {
-  // Mark that we're toggling (to restore position)
-  isTogglingRef.current = true;
-  
-  // Store current scroll position
-  const currentScrollY = scrollYRef.current;
-
-  console.log('🔵 Toggling profile, current scrollY:', currentScrollY);
-  
-  // Update state
-  const newExpanded = new Set(expandedProfiles);
-  if (newExpanded.has(profileId)) {
-    newExpanded.delete(profileId);
-  } else {
-    newExpanded.add(profileId);
-  }
-  setExpandedProfiles(newExpanded);
-  
-  // Restore scroll position after render
-  setTimeout(() => {
-    if (scrollViewRef.current && isTogglingRef.current) {
-      scrollViewRef.current.scrollTo({ 
-        y: currentScrollY, 
-        animated: false 
-      });
-      isTogglingRef.current = false;
+  const toggleProfileExpanded = useCallback((profileId) => {
+    // Mark that we're toggling (to restore position)
+    isTogglingRef.current = true;
+    
+    // Store current scroll position
+    const currentScrollY = scrollYRef.current;
+    
+    // Update state
+    const newExpanded = new Set(expandedProfiles);
+    if (newExpanded.has(profileId)) {
+      newExpanded.delete(profileId);
+    } else {
+      newExpanded.add(profileId);
     }
-  }, 10);
-}, [expandedProfiles]);
+    setExpandedProfiles(newExpanded);
+    
+    // Restore scroll position after render
+    setTimeout(() => {
+      if (scrollViewRef.current && isTogglingRef.current) {
+        scrollViewRef.current.scrollTo({ 
+          y: currentScrollY, 
+          animated: false 
+        });
+        isTogglingRef.current = false;
+      }
+    }, 10);
+  }, [expandedProfiles]);
 
-  // 🆕 UPDATED: Add Family Member (works on iOS + Android)
+  // Add Family Member (works on iOS + Android)
   const addFamilyMember = async () => {
     try {
       console.log('🔵 Step 1: Starting addFamilyMember');
@@ -307,48 +418,46 @@ const ProfileScreen = ({
       console.log('🔵 Step 3: canAdd.allowed =', canAdd.allowed);
       
       if (!canAdd.allowed) {
-  console.log('🔴 Step 4: Tier limit reached, showing upgrade modal');
-  
-  // Different buttons and messages based on tier
-  let buttons = [];
-  let title = '📊 Profile Limit Reached';
-  
-  if (userTier.toUpperCase() === 'PRO') {
-    // PRO users: Just show OK (they're at max limit)
-    buttons = [{ text: 'OK', style: 'default' }];
-  } else if (userTier.toUpperCase() === 'PLUS') {
-    // PLUS users: Offer upgrade to PRO
-    title = '⭐ Upgrade to Pro?';
-    buttons = [
-      { text: 'Maybe Later', style: 'cancel' },
-      { 
-        text: 'Upgrade to Pro', 
-        onPress: () => {
-          // TODO: Open upgrade modal for PRO
-          console.log('Open PRO upgrade modal');
-          Alert.alert('Coming Soon', 'Pro upgrade coming soon!');
+        console.log('🔴 Step 4: Tier limit reached, showing upgrade modal');
+        
+        // Different buttons and messages based on tier
+        let buttons = [];
+        let title = '📊 Profile Limit Reached';
+        
+        if (userTier.toUpperCase() === 'PRO') {
+          // PRO users: Just show OK (they're at max limit)
+          buttons = [{ text: 'OK', style: 'default' }];
+        } else if (userTier.toUpperCase() === 'PLUS') {
+          // PLUS users: Offer upgrade to PRO
+          title = '⭐ Upgrade to Pro?';
+          buttons = [
+            { text: 'Maybe Later', style: 'cancel' },
+            { 
+              text: 'Upgrade to Pro', 
+              onPress: () => {
+                console.log('Open PRO upgrade modal');
+                Alert.alert('Coming Soon', 'Pro upgrade coming soon!');
+              }
+            }
+          ];
+        } else {
+          // FREE users: Offer upgrade to PLUS
+          title = '⭐ Upgrade to Plus?';
+          buttons = [
+            { text: 'Maybe Later', style: 'cancel' },
+            { 
+              text: 'Upgrade to Plus', 
+              onPress: () => {
+                console.log('Open PLUS upgrade modal');
+                Alert.alert('Coming Soon', 'Plus upgrade coming soon!');
+              }
+            }
+          ];
         }
+        
+        Alert.alert(title, canAdd.message, buttons);
+        return;
       }
-    ];
-  } else {
-    // FREE users: Offer upgrade to PLUS
-    title = '⭐ Upgrade to Plus?';
-    buttons = [
-      { text: 'Maybe Later', style: 'cancel' },
-      { 
-        text: 'Upgrade to Plus', 
-        onPress: () => {
-          // TODO: Open upgrade modal for PLUS
-          console.log('Open PLUS upgrade modal');
-          Alert.alert('Coming Soon', 'Plus upgrade coming soon!');
-        }
-      }
-    ];
-  }
-  
-  Alert.alert(title, canAdd.message, buttons);
-  return;
-}
       
       console.log('✅ Step 5: Tier check passed, showing modal');
 
@@ -360,7 +469,7 @@ const ProfileScreen = ({
     }
   };
 
-  // 🆕 Handler for when user submits name from modal
+  // Handler for when user submits name from modal
   const handleAddFamilyMemberSubmit = async (name) => {
     setShowAddFamilyModal(false);
     
@@ -405,12 +514,12 @@ const ProfileScreen = ({
         }
       ]
     );
-}, []);
+  }, []);
 
- const openAllergenPicker = useCallback((profile) => {
-  setCurrentPickerProfile(profile);
-  setShowAllergenPicker(true);
-}, []);
+  const openAllergenPicker = useCallback((profile) => {
+    setCurrentPickerProfile(profile);
+    setShowAllergenPicker(true);
+  }, []);
 
   const handleSelectAllergen = async (allergen) => {
     if (!currentPickerProfile) return;
@@ -432,7 +541,6 @@ const ProfileScreen = ({
   };
 
   const removeAllergen = useCallback((profileId, allergenId, profileName, allergenName) => {
- 
     Alert.alert(
       'Remove Allergen?',
       `Remove ${allergenName} from ${profileName}'s allergens?`,
@@ -476,14 +584,14 @@ const ProfileScreen = ({
   );
 
   return (
-  <ScreenContainer 
-    activeTab="profile" 
-    setActiveTab={setActiveTab}
-    scrollViewRef={scrollViewRef}
-    onScroll={(event) => {
-      scrollYRef.current = event.nativeEvent.contentOffset.y;
-    }}
-  >
+    <ScreenContainer 
+      activeTab="profile" 
+      setActiveTab={setActiveTab}
+      scrollViewRef={scrollViewRef}
+      onScroll={(event) => {
+        scrollYRef.current = event.nativeEvent.contentOffset.y;
+      }}
+    >
       <StatusBar barStyle="light-content" />
 
       <LinearGradient
@@ -575,99 +683,18 @@ const ProfileScreen = ({
             <ActivityIndicator size="large" color="#667EEA" />
           </View>
         ) : (
-          allergenProfiles.map((profile) => {
-            const isExpanded = expandedProfiles.has(profile.id);
-            const allergenCount = profile.allergens.length;
-
-            return (
-              <View key={profile.id} style={allergenStyles.profileCard}>
-                {/* Profile Header */}
-                <TouchableOpacity
-                  style={allergenStyles.profileHeader}
-                  onPress={() => toggleProfileExpanded(profile.id)}
-                  activeOpacity={0.7}
-                >
-                  <View style={allergenStyles.profileHeaderLeft}>
-                    <Text style={allergenStyles.profileIcon}>
-                      {profile.id === 'user' ? '👤' : '👨‍👩‍👧'}
-                    </Text>
-                    <View>
-                      <Text style={allergenStyles.profileName}>{profile.name}</Text>
-                      <Text style={allergenStyles.profileSubtext}>
-                        {allergenCount} allergen{allergenCount !== 1 ? 's' : ''}
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={allergenStyles.expandIcon}>
-                    {isExpanded ? '▼' : '▶'}
-                  </Text>
-                </TouchableOpacity>
-
-                {/* Expanded Content */}
-                {isExpanded && (
-                  <View style={allergenStyles.profileContent}>
-                    {allergenCount === 0 ? (
-                      <View style={allergenStyles.emptyState}>
-                        <Text style={allergenStyles.emptyText}>
-                          No allergens added yet
-                        </Text>
-                      </View>
-                    ) : (
-                      <View style={allergenStyles.allergensContainer}>
-                        {profile.allergens.map((allergenId) => {
-                          const allergen = ALLERGEN_DATABASE[allergenId];
-                          if (!allergen) return null;
-
-                          return (
-                            <View key={allergenId} style={allergenStyles.allergenChip}>
-                              <Text style={allergenStyles.allergenChipIcon}>
-                                {getSeverityIcon(allergen.severity)}
-                              </Text>
-                              <Text style={allergenStyles.allergenChipText}>
-                                {allergen.name}
-                              </Text>
-                              <TouchableOpacity
-                                onPress={() => removeAllergen(
-                                  profile.id,
-                                  allergenId,
-                                  profile.name,
-                                  allergen.name
-                                )}
-                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                              >
-                                <Text style={allergenStyles.allergenChipRemove}>✕</Text>
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
-
-                    {/* Action Buttons */}
-                    <View style={allergenStyles.profileActions}>
-                      <TouchableOpacity
-                        style={allergenStyles.actionButton}
-                        onPress={() => openAllergenPicker(profile)}
-                      >
-                        <Text style={allergenStyles.actionButtonText}>
-                          + Add Allergen
-                        </Text>
-                      </TouchableOpacity>
-
-                      {profile.id !== 'user' && (
-                        <TouchableOpacity
-                          style={allergenStyles.deleteButton}
-                          onPress={() => deleteProfile(profile.id, profile.name)}
-                        >
-                          <Text style={allergenStyles.deleteButtonText}>🗑️</Text>
-                        </TouchableOpacity>
-                      )}
-                    </View>
-                  </View>
-                )}
-              </View>
-            );
-          })
+          allergenProfiles.map((profile) => (
+            <ProfileCard
+              key={profile.id}
+              profile={profile}
+              isExpanded={expandedProfiles.has(profile.id)}
+              onToggle={toggleProfileExpanded}
+              onDelete={deleteProfile}
+              onAddAllergen={openAllergenPicker}
+              onRemoveAllergen={removeAllergen}
+              getSeverityIcon={getSeverityIcon}
+            />
+          ))
         )}
 
         {/* Upgrade Prompt for Free Users */}
@@ -827,7 +854,6 @@ const ProfileScreen = ({
         profileName={currentPickerProfile?.name || ''}
       />
       
-      {/* 🆕 Add Family Member Modal */}
       <AddFamilyMemberModal
         visible={showAddFamilyModal}
         onClose={() => setShowAddFamilyModal(false)}

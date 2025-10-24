@@ -31,6 +31,7 @@ import ProfileScreen from './screens/ProfileScreen';
 import SplashScreen from './screens/SplashScreen';
 import AuthScreen from './screens/AuthScreen';
 import { LinearGradient } from 'expo-linear-gradient';
+import GamificationService from './services/GamificationService';
 import SimpleScanner from './components/SimpleScanner';
 import ProductService from './services/ProductService';
 import EnhancedManualScanner from './components/EnhancedManualScanner';
@@ -213,6 +214,32 @@ useEffect(() => {
 
     initializeRevenueCat();
 
+    // 🎮 TEST GAMIFICATION SERVICE
+    const testGamification = async () => {
+      try {
+        console.log('');
+        console.log('🎮 ═══════════════════════════════════════');
+        console.log('🎮 TESTING GAMIFICATION SERVICE');
+        console.log('🎮 ═══════════════════════════════════════');
+        
+        const summary = await GamificationService.getSummary();
+        
+        console.log('✅ GamificationService loaded successfully!');
+        console.log('📊 Current Stats:');
+        console.log('   XP:', summary.xp);
+        console.log('   Level:', summary.level);
+        console.log('   Total Scans:', summary.totalScans);
+        console.log('   Streak:', summary.streakDays, 'days');
+        console.log('   Badges Unlocked:', summary.unlockedBadgesCount, '/', summary.totalBadgesCount);
+        console.log('🎮 ═══════════════════════════════════════');
+        console.log('');
+      } catch (error) {
+        console.error('❌ Gamification test failed:', error);
+      }
+    };
+    
+    testGamification();
+
     // 🚀 PRE-LOAD RECALL FEED ON APP STARTUP
     const preloadRecalls = async () => {
   if (recallsPreloaded) {
@@ -364,14 +391,49 @@ useEffect(() => {
     try {
       console.log('📱 Barcode scanned:', barcode);
 
+      // ✅ Extract barcode string from object or use as-is
       const barcodeString = typeof barcode === 'object' ? barcode.data : barcode;
       const product = await ProductService.fetchProductByBarcode(barcodeString);
 
       if (product) {
-        product.barcode = barcodeString; 
+        product.barcode = barcodeString;
         setCurrentProduct(product);
         setShowResult(true);
         await saveToHistory(product);
+        
+        // 🎮 AWARD GAMIFICATION XP
+        try {
+          const gamificationResult = await GamificationService.processScan(product, scanHistory);
+          
+          console.log('');
+          console.log('🎮 ═══════════════════════════════════════');
+          console.log('🎮 GAMIFICATION REWARDS');
+          console.log('🎮 ═══════════════════════════════════════');
+          console.log('✨ Total XP Earned:', gamificationResult.totalXP);
+          console.log('📋 Rewards:');
+          gamificationResult.rewards.forEach(reward => {
+            console.log(`   • ${reward.reason}: +${reward.xp} XP`);
+          });
+          
+          if (gamificationResult.levelUp) {
+            console.log('🎉 LEVEL UP!', gamificationResult.oldLevel, '→', gamificationResult.newLevel);
+          }
+          
+          if (gamificationResult.badgesUnlocked.length > 0) {
+            console.log('🏆 New Badges:');
+            gamificationResult.badgesUnlocked.forEach(badge => {
+              console.log(`   • ${badge.emoji} ${badge.name} (+${badge.xpReward} XP)`);
+            });
+          }
+          console.log('🎮 ═══════════════════════════════════════');
+          console.log('');
+          
+          // Update streak
+          await GamificationService.updateStreak(scanHistory);
+          
+        } catch (gamError) {
+          console.error('⚠️ Gamification error (non-critical):', gamError);
+        }
       } else {
         Alert.alert('Product Not Found', 'No information available for this product.');
       }

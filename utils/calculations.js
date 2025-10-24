@@ -54,9 +54,39 @@ export const getTodayScans = (scanHistory) => {
 
 export const calculateStreak = (scanHistory) => {
   if (scanHistory.length === 0) return 0;
-  let streak = 1;
-  const today = new Date().toDateString();
-  const latestScan = new Date(scanHistory[0].date).toDateString();
-  if (latestScan !== today) return 0;
-  return streak;
+  
+  let currentStreak = 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Sort history by date (most recent first)
+  const sortedHistory = [...scanHistory].sort((a, b) => 
+    new Date(b.date).getTime() - new Date(a.date).getTime()
+  );
+  
+  // Check if scanned today or yesterday (allow 1-day gap for midnight edge cases)
+  const latestScan = new Date(sortedHistory[0].date);
+  latestScan.setHours(0, 0, 0, 0);
+  
+  const daysDiff = Math.floor((today.getTime() - latestScan.getTime()) / (24 * 60 * 60 * 1000));
+  
+  if (daysDiff > 1) {
+    return 0; // Streak broken
+  }
+  
+  // Count consecutive days
+  let checkDate = new Date(today);
+  for (let i = 0; i < sortedHistory.length; i++) {
+    const scanDate = new Date(sortedHistory[i].date);
+    scanDate.setHours(0, 0, 0, 0);
+    
+    if (scanDate.getTime() === checkDate.getTime()) {
+      currentStreak++;
+      checkDate.setDate(checkDate.getDate() - 1);
+    } else if (scanDate.getTime() < checkDate.getTime()) {
+      break; // Streak broken
+    }
+  }
+  
+  return currentStreak;
 };
