@@ -338,13 +338,13 @@ useEffect(() => {
     try {
       const newItem = {
         id: Date.now().toString(),
-        name: product.product_name,
-        brand: product.brands,
-        grade: product.nutriscore_grade || 'unknown',
-        score: product.calculatedScore || 0,
+        name: product.name || product.product_name || 'Unknown Product',
+        brand: product.brand || product.brands || 'Unknown Brand',
+        grade: product.healthScore?.grade || product.nutriscore_grade || '?',
+        score: product.healthScore?.score || product.calculatedScore || 0,
         barcode: product.barcode,
-        image: product.image_url,
-        scannedAt: new Date().toISOString(),
+        image: product.image || product.image_url,
+        date: new Date().toISOString(),  // ✅ Changed from 'scannedAt' to 'date'
         fullProduct: product,
       };
 
@@ -364,10 +364,11 @@ useEffect(() => {
     try {
       console.log('📱 Barcode scanned:', barcode);
 
-      const product = await ProductService.fetchProductByBarcode(barcode);
+      const barcodeString = typeof barcode === 'object' ? barcode.data : barcode;
+      const product = await ProductService.fetchProductByBarcode(barcodeString);
 
       if (product) {
-        product.barcode = barcode;
+        product.barcode = barcodeString; 
         setCurrentProduct(product);
         setShowResult(true);
         await saveToHistory(product);
